@@ -1,0 +1,7 @@
+GET   /helloworld               controllers.Application.helloworld
+GET   /download/:length         controllers.Application.download(length: Int)
+GET   /download-chunked/:length controllers.Application.downloadChunked(length: Int)
+PUT   /upload                   controllers.Application.upload
+GET   /template/simple          controllers.Application.templateSimple
+GET   /template/lang            controllers.Application.templateLang
+GET   /json/encode              controllers.Application.jsonEncode
