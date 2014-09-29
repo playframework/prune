@@ -1,5 +1,4 @@
-## Prune
+# Prune
+*"Keeping Play moving"*
 
-# Play Performance Runner.
-
-*"Keeping Play moving"
+Prune is the Play Framework's Performance Runner. It automates the process of regression testing Play performance.
