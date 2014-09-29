@@ -1,2 +1,3 @@
-The Play Performance Runner (Prune) database repository. This repository
-is used to store the results of performance tests.
+This branch stores test results for *Prune*.
+
+See: https://github.com/playframework/prune
