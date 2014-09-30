@@ -23,18 +23,7 @@ import Exec._
 import PruneGit._
 
 object BuildPlay {
-  def buildPlay(playCommit: String)(implicit ctx: Context): PlayBuildRecord = {
-
-    def playBuildRecordPath(id: UUID): Path = {
-      Paths.get(ctx.config.getString("db-repo.local-dir"), "builds", id.toString+".json")
-    }
-    def writePlayBuildRecord(id: UUID, record: PlayBuildRecord): Unit = {
-      println(s"Writing Play build record $id")
-      Records.writeFile(playBuildRecordPath(id), record)
-    }
-    def readPlayBuildRecord(id: UUID): Option[PlayBuildRecord] = {
-      Records.readFile[PlayBuildRecord](playBuildRecordPath(id))
-    }
+  def buildPlay(playBranch: String, playCommit: String)(implicit ctx: Context): PlayBuildRecord = {
 
     val buildCommands: Seq[Command] = Seq(
       Command(
@@ -55,7 +44,7 @@ object BuildPlay {
     // println(Files.exists(Paths.get(ivyHome).resolve("local")))
 
     val lastPlayBuildId: Option[UUID] = PrunePersistentState.read.flatMap(_.lastPlayBuild)
-    val lastPlayBuildRecord: Option[PlayBuildRecord] = lastPlayBuildId.flatMap(readPlayBuildRecord)
+    val lastPlayBuildRecord: Option[PlayBuildRecord] = lastPlayBuildId.flatMap(PlayBuildRecord.read)
     val reasonsToBuild: Seq[String] = lastPlayBuildRecord.fold(Seq("No existing build record")) { buildRecord =>
       val differentCommit = if (buildRecord.playCommit == playCommit) Seq() else Seq("Play commit has changed")
       val differentJavaVersion = if (buildRecord.javaVersionExecution.stderr == javaVersionExecution.stderr) Seq() else Seq("Java version has changed")
@@ -71,7 +60,10 @@ object BuildPlay {
       val newPlayBuildId = UUID.randomUUID()
       println(s"Starting new Play build $newPlayBuildId: "+(reasonsToBuild.mkString(", ")))
 
-      gitCheckout(ctx.playRepoConfig, playCommit)
+      gitCheckout(
+        localDir = ctx.playHome,
+        branch = playBranch,
+        commit = playCommit)
 
       // Clear local Ivy repository to ensure an isolated build
       if (Files.exists(localIvyRepository)) {
@@ -85,7 +77,7 @@ object BuildPlay {
         javaVersionExecution = javaVersionExecution,
         buildExecutions = executions
       )
-      writePlayBuildRecord(newPlayBuildId, newPlayBuildRecord)
+      PlayBuildRecord.write(newPlayBuildId, newPlayBuildRecord)
       PrunePersistentState.write(PrunePersistentState.read.get.copy(lastPlayBuild = Some(newPlayBuildId)))
       newPlayBuildRecord
     }

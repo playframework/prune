@@ -15,7 +15,6 @@ import org.eclipse.jgit.lib._
 import org.eclipse.jgit.revwalk._
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.joda.time._
-import scala.collection.JavaConversions
 import scala.concurrent._
 import scala.concurrent.duration.Duration
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -25,11 +24,16 @@ import Exec._
 import PruneGit._
 
 case class TestTask(
-  name: String,
+  info: TestTaskInfo,
+  playBranch: String,
+  testsBranch: String
+)
+
+case class TestTaskInfo(
+  testName: String,
   playCommit: String,
   testsCommit: String,
-  testProject: String,
-  requestPath: String
+  testProject: String
 )
 
 object Prune {
@@ -39,11 +43,8 @@ object Prune {
       opt[String]("config-file") action { (s, c) =>
         c.copy(configFile = Some(s))
       }
-      opt[String]("play-revision") action { (s, c) =>
-        c.copy(playRevision = Some(s))
-      }
-      opt[String]("tests-revision") action { (s, c) =>
-        c.copy(testsRevision = Some(s))
+      opt[Unit]("skip-fetches") action { (_, c) =>
+        c.copy(dbFetch = false, playFetch = false, testsFetch = false)
       }
       opt[Unit]("skip-db-fetch") action { (_, c) =>
         c.copy(dbFetch = false)
@@ -115,59 +116,79 @@ object Prune {
 
   def main(implicit ctx: Context): Unit = {
 
+    val playBranches = ctx.playTests.map(_.playBranch).distinct
+    val testsBranches = ctx.playTests.map(_.testsBranch).distinct
+
     println(s"Prune instance id is ${ctx.pruneInstanceId}")
 
     {
-      def fetch(switch: Boolean, repoConfig: RepoConfig): Unit = {
+      def fetch(desc: String, switch: Boolean, remote: String, branches: Seq[String], localDir: String): Unit = {
         if (switch) {
-          println(s"Fetching ${repoConfig.description} from remote")
+          println(s"Fetching $desc from remote")
           gitSync(
-            remote = repoConfig.remote,
-            branches = repoConfig.branches,
-            localDir = repoConfig.localDir)
+            remote = remote,
+            branches = branches,
+            localDir = localDir)
         } else {
-          println(s"Skipping fetch of ${repoConfig.description} from remote")
+          println(s"Skipping fetch of $desc from remote")
         }
       }
-      fetch(ctx.args.dbFetch, ctx.dbRepoConfig)
-      fetch(ctx.args.playFetch, ctx.playRepoConfig)
-      fetch(ctx.args.testsFetch, ctx.testsRepoConfig)
+      fetch("Prune database records", ctx.args.dbFetch, ctx.dbRemote, Seq(ctx.dbBranch), ctx.dbHome)
+      fetch("Play source code", ctx.args.playFetch, ctx.playRemote, playBranches, ctx.playHome)
+      fetch("tests source code", ctx.args.testsFetch, ctx.testsRemote, testsBranches, ctx.testsHome)
     }
 
-    def getCommitId(forceRevision: Option[String], repoConfig: RepoConfig): String = {
-      val revision: String = forceRevision.getOrElse(repoConfig.mainBranchRef)
-      val commitId: String = withRepository(repoConfig.localDir)(_.resolve(revision)).name
-      println(s"Selecting ${repoConfig.description} at commit $commitId")
-      commitId
+    val neededTasks: Seq[TestTask] = ctx.playTests.flatMap { playTest =>
+      //println(s"Working out tests to run for $playTest")
+
+      val testsId: AnyObjectId = resolveId(ctx.testsHome, playTest.testsBranch, playTest.testsRevision)
+      val revisions = gitLog(ctx.playHome, playTest.playBranch, playTest.playRevisionRange._1, playTest.playRevisionRange._2)
+      val nonMergeRevisions = revisions.filter(_.parentCount == 1)
+      nonMergeRevisions.flatMap { revision =>
+        playTest.testNames.map { testName =>
+          TestTask(
+            info = TestTaskInfo(
+              testName = testName,
+              playCommit = revision.id,
+              testsCommit = testsId.getName,
+              testProject = "scala-bench"
+            ),
+            playBranch = playTest.playBranch,
+            testsBranch = playTest.testsBranch
+          )
+        }
+      }
     }
-    val playCommitId = getCommitId(ctx.args.playRevision, ctx.playRepoConfig)
-    val testsCommitId = getCommitId(ctx.args.testsRevision, ctx.testsRepoConfig)
+    val neededPlayCommitCount: Int = neededTasks.map(_.info.playCommit).distinct.size
 
-    val testTasks = Seq(
-      TestTask(
-        "tiny",
-        playCommit = playCommitId,
-        testsCommit = testsCommitId,
-        testProject = "scala-bench",
-        requestPath = "/helloworld"
-      ),
-      TestTask(
-        "download-50k",
-        playCommit = playCommitId,
-        testsCommit = testsCommitId,
-        testProject = "scala-bench",
-        requestPath = "/download/51200"
-      ),
-      TestTask(
-        "download-chunked-50k",
-        playCommit = playCommitId,
-        testsCommit = testsCommitId,
-        testProject = "scala-bench",
-        requestPath = "/download-chunked/51200"
-      )
-    )
+    val completedTaskInfos: Seq[TestTaskInfo] = {
+      val db = DB.read
+      //println(s"DB: $db")
+      db.testRuns.foldLeft[Seq[TestTaskInfo]](Seq.empty) {
+        case (tasks, (_, testRunRecord)) =>
+          val optTask: Option[TestTaskInfo] = for {
+            testBuildRecord <- db.testBuilds.get(testRunRecord.testBuildId)
+            playBuildRecord <- db.playBuilds.get(testBuildRecord.playBuildId)
+            if playBuildRecord.pruneInstanceId == ctx.pruneInstanceId
+          } yield TestTaskInfo(
+            testName = testRunRecord.testName,
+            playCommit = playBuildRecord.playCommit,
+            testsCommit = testBuildRecord.testsCommit,
+            testProject = testBuildRecord.testProject
+          )
+          tasks ++ optTask.toSeq
+      }
+    }
+    val completedPlayCommitCount: Int = completedTaskInfos.map(_.playCommit).distinct.size
 
-    testTasks.foreach(RunTest.runTestTask)
+    val tasksToRun: Seq[TestTask] = neededTasks.filter(task => !completedTaskInfos.contains(task.info))
+    val playCommitsToRunCount: Int = tasksToRun.map(_.info.playCommit).distinct.size
+
+    println(s"Prune tests already executed: ${completedPlayCommitCount} Play revisions, ${completedTaskInfos.size}  test runs")
+    println(s"Prune tests needed: ${neededPlayCommitCount} Play revisions, ${neededTasks.size} test runs")
+    println(s"Prune tests remaining: ${playCommitsToRunCount} Play revisions, ${tasksToRun.size} test runs")
+
+    tasksToRun.foreach(RunTest.runTestTask)
   }
 
 }

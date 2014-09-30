@@ -24,22 +24,13 @@ import PruneGit._
 
 object BuildTest {
   def buildTestProject(
+    playBranch: String,
     playCommit: String,
+    testsBranch: String,
     testsCommit: String,
     testProject: String)(implicit ctx: Context): TestBuildRecord = {
 
-    BuildPlay.buildPlay(playCommit)
-
-    def testBuildRecordPath(id: UUID): Path = {
-      Paths.get(ctx.config.getString("db-repo.local-dir"), "test-builds", id.toString+".json")
-    }
-    def writeTestBuildRecord(id: UUID, record: TestBuildRecord): Unit = {
-      println(s"Writing test build record $id")
-      Records.writeFile(testBuildRecordPath(id), record)
-    }
-    def readTestBuildRecord(id: UUID): Option[TestBuildRecord] = {
-      Records.readFile[TestBuildRecord](testBuildRecordPath(id))
-    }
+    BuildPlay.buildPlay(playBranch = playBranch, playCommit = playCommit)
 
     val buildCommands: Seq[Command] = Seq(
       Command(
@@ -59,7 +50,7 @@ object BuildTest {
     }
 
     val lastTestBuildId: Option[UUID] = PrunePersistentState.read.flatMap(_.lastTestBuilds.get(testProject))
-    val lastTestBuildRecord: Option[TestBuildRecord] = lastTestBuildId.flatMap(readTestBuildRecord)
+    val lastTestBuildRecord: Option[TestBuildRecord] = lastTestBuildId.flatMap(TestBuildRecord.read)
     val reasonsToBuild: Seq[String] = lastTestBuildRecord.fold(Seq("No existing build record")) { buildRecord =>
       val differentPlayBuild = if (buildRecord.playBuildId == lastPlayBuildId) Seq() else Seq("Play build has changed")
       val differentCommit = if (buildRecord.testsCommit == testsCommit) Seq() else Seq("Tests commit has changed")
@@ -77,19 +68,29 @@ object BuildTest {
       val newTestBuildId = UUID.randomUUID()
       println(s"Starting build for $testProject test $newTestBuildId: "+(reasonsToBuild.mkString(", ")))
 
-      gitCheckout(ctx.testsRepoConfig, testsCommit)
+      gitCheckout(
+        localDir = ctx.testsHome,
+        branch = testsBranch,
+        commit = testsCommit)
+
+      // Clear local target directory to ensure an isolated build
+      {
+        val targetDir = Paths.get(ctx.testsHome, testProject, "target")
+        if (Files.exists(targetDir)) {
+          FileUtils.deleteDirectory(targetDir.toFile)
+        }
+      }
 
       val buildExecutions = buildCommands.map(run(_, Pump))
 
       val newTestBuildRecord = TestBuildRecord(
-        pruneInstanceId = ctx.pruneInstanceId,
         playBuildId = lastPlayBuildId,
         testsCommit = testsCommit,
         testProject = testProject,
         javaVersionExecution = javaVersionExecution,
         buildExecutions = buildExecutions
       )
-      writeTestBuildRecord(newTestBuildId, newTestBuildRecord)
+      TestBuildRecord.write(newTestBuildId, newTestBuildRecord)
       val oldPersistentState = PrunePersistentState.read.get
       PrunePersistentState.write(oldPersistentState.copy(lastTestBuilds = oldPersistentState.lastTestBuilds.updated(testProject, newTestBuildId)))
       newTestBuildRecord

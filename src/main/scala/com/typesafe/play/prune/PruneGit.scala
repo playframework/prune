@@ -13,12 +13,10 @@ import org.eclipse.jgit.lib._
 import org.eclipse.jgit.revwalk._
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import scala.collection.JavaConversions
+import scala.collection.convert.WrapAsJava._
+import scala.collection.convert.WrapAsScala._
 
 object PruneGit {
-
-  def withRepository[T](repoConfig: RepoConfig)(f: Repository => T): T = {
-    withRepository(repoConfig.localDir)(f)
-  }
 
   def withRepository[T](localDir: String)(f: Repository => T): T = {
     val builder = new FileRepositoryBuilder()
@@ -31,10 +29,17 @@ object PruneGit {
     result
   }
 
+  def resolveId(localDir: String, branch: String, rev: String): AnyObjectId = {
+    withRepository(localDir) { repository =>
+      val fixedRev = if (rev == "HEAD") s"refs/heads/$branch" else rev
+      Option(repository.resolve(fixedRev)).getOrElse(sys.error(s"Couldn't resolve revision $rev on branch $branch in repo $localDir"))
+    }
+  }
+
   def gitSync(
     remote: String,
     localDir: String,
-    branches: JList[String]): Unit = {
+    branches: Seq[String]): Unit = {
 
     println(s"Syncing $remote branches $branches into $localDir...")
 
@@ -44,7 +49,8 @@ object PruneGit {
       println(s"Cloning...")
       Git.cloneRepository()
         .setURI(remote)
-        .setBranchesToClone(branches)
+        .setBranchesToClone(seqAsJavaList(branches))
+        .setBranch(branches.head) // pick a random branch
         .setDirectory(localDirPath.toFile)
         .call()
       println("Clone done.")
@@ -61,9 +67,25 @@ object PruneGit {
     println("Fetch done")
   }
 
-  def gitCheckout(repoConfig: RepoConfig, startPoint: String): Unit = {
-    withRepository(repoConfig) { repository =>
-      val result = new Git(repository).checkout().setName(repoConfig.mainBranchRef).setStartPoint(startPoint).call()
+  def gitCheckout(localDir: String, branch: String, commit: String): Unit = {
+    withRepository(localDir) { repository =>
+      val result = new Git(repository).checkout().setName(branch).setStartPoint(commit).call()
+    }
+  }
+
+  case class LogEntry(id: String, parentCount: Int, shortMessage: String)
+
+  def gitLog(localDir: String, branch: String, startRev: String, endRev: String): Seq[LogEntry] = {
+    withRepository(localDir) { repository =>
+      val startId = resolveId(localDir, branch, startRev)
+      val endId = resolveId(localDir, branch, endRev)
+      // println(s"Logging from $startId to $endId")
+      val result = new Git(repository).log().addRange(startId, endId).call()
+      val logEntries: Iterable[LogEntry] = iterableAsScalaIterable(result).map { revCommit =>
+        //println(revCommit.getId.getName)
+        LogEntry(revCommit.getId.name, revCommit.getParentCount, revCommit.getShortMessage)
+      }
+      logEntries.to[Seq]
     }
   }
 

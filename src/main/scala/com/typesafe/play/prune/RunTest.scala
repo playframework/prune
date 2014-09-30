@@ -26,38 +26,39 @@ object RunTest {
 
   def runTestTask(testTask: TestTask)(implicit ctx: Context): Unit = {
     // println(s"Preparing test ${testTask.name}")
-    import testTask._
     BuildTest.buildTestProject(
-      playCommit = playCommit,
-      testsCommit = testsCommit,
-      testProject = testProject
+      playBranch = testTask.playBranch,
+      playCommit = testTask.info.playCommit,
+      testsBranch = testTask.testsBranch,
+      testsCommit = testTask.info.testsCommit,
+      testProject = testTask.info.testProject
     )
 
     val stageDirRelativePath = "target/universal/stage"
     // val stageDir: Path = testDir.resolve())
     // val pidFile: Path = stageDir.resolve("RUNNING_PID")
-    val pidFile: Path = ctx.testsRepoConfig.localDirPath.resolve(Paths.get(testProject, stageDirRelativePath, "RUNNING_PID"))
+    val pidFile: Path = Paths.get(ctx.testsHome, testTask.info.testProject, stageDirRelativePath, "RUNNING_PID")
 
     if (Files.exists(pidFile)) {
-      println(s"Can't run test app $testProject because $pidFile already exists")
+      println(s"Can't run test app ${testTask.info.testProject} because $pidFile already exists")
       return
     }
 
     val javaVersionExecution: Execution = JavaVersion.captureJavaVersion()
 
     val testRunId = UUID.randomUUID()
-    println(s"Starting test ${testTask.name} run $testRunId")
+    println(s"Starting test ${testTask.info.testName} run $testRunId")
 
     // println("Starting test app scala-bench")
     val terminateServer: () => Execution = runAsync(
     // val serverE = run(
       Command(
-        s"bin/$testProject",
+        s"bin/${testTask.info.testProject}",
         args = Seq(),
-        workingDir = s"<tests.home>/$testProject/$stageDirRelativePath",
+        workingDir = s"<tests.home>/${testTask.info.testProject}/$stageDirRelativePath",
         env = Map(
           "JAVA_HOME" -> "<java8.home>",
-          "JAVA_OPTS" -> "-Xms1g -Xmx1g -verbose:gc" // -XX:+PrintFlagsFinal
+          "JAVA_OPTS" -> ctx.config.getString("java8.opts")
         )
       ),
       Capture
@@ -81,6 +82,14 @@ object RunTest {
         //   connections: 32
         //   threads: 16
         // }
+
+        // TODO: Move test details to configuration
+        val requestPath: String = testTask.info.testName match {
+          case "scala-hello-world" => "/helloworld"
+          case "scala-download-50k" => "/download/51200"
+          case "scala-download-chunked-50k" => "/download-chunked/51200"
+          case name => sys.error(s"Unknown test name: $name")
+        }
 
         // TODO: Capture wrk version
 
@@ -109,9 +118,8 @@ object RunTest {
         val serverExecution = terminateServer()
         
         val testRunRecord = TestRunRecord(
-          ctx.pruneInstanceId,
-          PrunePersistentState.read.flatMap(_.lastTestBuilds.get(testProject)).get,
-          testTask.name,
+          PrunePersistentState.read.flatMap(_.lastTestBuilds.get(testTask.info.testProject)).get,
+          testTask.info.testName,
           javaVersionExecution,
           serverExecution,
           Seq(
@@ -120,18 +128,7 @@ object RunTest {
           )
         )
 
-        def testRunRecordPath(id: UUID): Path = {
-          Paths.get(ctx.config.getString("db-repo.local-dir"), "test-runs", id.toString+".json")
-        }
-        def writeTestRunRecord(id: UUID, record: TestRunRecord): Unit = {
-          println(s"Writing test run record $id")
-          Records.writeFile(testRunRecordPath(id), record)
-        }
-        def readTestRunRecord(id: UUID): Option[TestRunRecord] = {
-          Records.readFile[TestRunRecord](testRunRecordPath(id))
-        }
-
-        writeTestRunRecord(testRunId, testRunRecord)
+        TestRunRecord.write(testRunId, testRunRecord)
       }
     } finally {
       if (!terminated) terminateServer()
