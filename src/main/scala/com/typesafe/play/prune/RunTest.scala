@@ -26,21 +26,21 @@ object RunTest {
 
   def runTestTask(testTask: TestTask)(implicit ctx: Context): Unit = {
     // println(s"Preparing test ${testTask.name}")
-    BuildTest.buildTestProject(
+    BuildApp.buildApp(
       playBranch = testTask.playBranch,
       playCommit = testTask.info.playCommit,
-      testsBranch = testTask.testsBranch,
-      testsCommit = testTask.info.testsCommit,
-      testProject = testTask.info.testProject
+      appsBranch = testTask.appsBranch,
+      appsCommit = testTask.info.appsCommit,
+      appName = testTask.info.appName
     )
 
     val stageDirRelativePath = "target/universal/stage"
     // val stageDir: Path = testDir.resolve())
     // val pidFile: Path = stageDir.resolve("RUNNING_PID")
-    val pidFile: Path = Paths.get(ctx.testsHome, testTask.info.testProject, stageDirRelativePath, "RUNNING_PID")
+    val pidFile: Path = Paths.get(ctx.appsHome, testTask.info.appName, stageDirRelativePath, "RUNNING_PID")
 
     if (Files.exists(pidFile)) {
-      println(s"Can't run test app ${testTask.info.testProject} because $pidFile already exists")
+      println(s"Can't run test app ${testTask.info.appName} because $pidFile already exists")
       return
     }
 
@@ -53,9 +53,9 @@ object RunTest {
     val terminateServer: () => Execution = runAsync(
     // val serverE = run(
       Command(
-        s"bin/${testTask.info.testProject}",
+        s"bin/${testTask.info.appName}",
         args = Seq(),
-        workingDir = s"<tests.home>/${testTask.info.testProject}/$stageDirRelativePath",
+        workingDir = s"<tests.home>/${testTask.info.appName}/$stageDirRelativePath",
         env = Map(
           "JAVA_HOME" -> "<java8.home>",
           "JAVA_OPTS" -> ctx.config.getString("java8.opts")
@@ -64,8 +64,6 @@ object RunTest {
       Capture
       //timeout = Option(20000) // TODO: Timeout
     )
-    // val terminateServer: () => Execution = () => serverE
-    // System.exit(1)
     var terminated = false // Mark termination so we can terminate in finally clause if there's an error
     try {
 
@@ -76,13 +74,6 @@ object RunTest {
       }
 
       {
-        // wrk {
-        //   warmupTime: 2 seconds
-        //   testTime: 2 seconds
-        //   connections: 32
-        //   threads: 16
-        // }
-
         // TODO: Move test details to configuration
         val requestPath: String = testTask.info.testName match {
           case "scala-hello-world" => "/helloworld"
@@ -116,13 +107,13 @@ object RunTest {
 
         terminated = true
         val serverExecution = terminateServer()
-        
+
         val testRunRecord = TestRunRecord(
-          PrunePersistentState.read.flatMap(_.lastTestBuilds.get(testTask.info.testProject)).get,
-          testTask.info.testName,
-          javaVersionExecution,
-          serverExecution,
-          Seq(
+          appBuildId = PrunePersistentState.read.flatMap(_.lastAppBuilds.get(testTask.info.appName)).get,
+          testName = testTask.info.testName,
+          javaVersionExecution = javaVersionExecution,
+          serverExecution = serverExecution,
+          wrkExecutions = Seq(
             warmupExecution,
             testExecution
           )

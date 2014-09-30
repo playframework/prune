@@ -40,8 +40,6 @@ object BuildPlay {
 
     val ivyHome: String = ctx.config.getString("ivy.home")
     val localIvyRepository: Path = Paths.get(ivyHome).resolve("local")
-    // println(Paths.get(ivyHome).resolve("local"))
-    // println(Files.exists(Paths.get(ivyHome).resolve("local")))
 
     val lastPlayBuildId: Option[UUID] = PrunePersistentState.read.flatMap(_.lastPlayBuild)
     val lastPlayBuildRecord: Option[PlayBuildRecord] = lastPlayBuildId.flatMap(PlayBuildRecord.read)
@@ -65,9 +63,15 @@ object BuildPlay {
         branch = playBranch,
         commit = playCommit)
 
-      // Clear local Ivy repository to ensure an isolated build
-      if (Files.exists(localIvyRepository)) {
-        FileUtils.deleteDirectory(localIvyRepository.toFile)
+      // Clear target directories and local Ivy repository to ensure an isolated build
+      Seq(
+        localIvyRepository,
+        Paths.get(ctx.playHome, "framework/target"),
+        Paths.get(ctx.playHome, "framework/project/target")
+      ) foreach { p =>
+        if (Files.exists(p)) {
+          FileUtils.deleteDirectory(p.toFile)
+        }
       }
 
       val executions: Seq[Execution] = buildCommands.map(run(_, Pump))
@@ -78,7 +82,8 @@ object BuildPlay {
         buildExecutions = executions
       )
       PlayBuildRecord.write(newPlayBuildId, newPlayBuildRecord)
-      PrunePersistentState.write(PrunePersistentState.read.get.copy(lastPlayBuild = Some(newPlayBuildId)))
+      val oldPersistentState: PrunePersistentState = PrunePersistentState.readOrElse
+      PrunePersistentState.write(oldPersistentState.copy(lastPlayBuild = Some(newPlayBuildId)))
       newPlayBuildRecord
     }
   }

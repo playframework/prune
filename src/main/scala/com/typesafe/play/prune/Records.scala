@@ -75,7 +75,7 @@ object Implicits {
 
 case class PrunePersistentState(
   lastPlayBuild: Option[UUID],
-  lastTestBuilds: Map[String,UUID]
+  lastAppBuilds: Map[String,UUID]
 )
 
 object PrunePersistentState {
@@ -83,13 +83,13 @@ object PrunePersistentState {
   implicit val writes = new Writes[PrunePersistentState] {
     def writes(prunePersistentState: PrunePersistentState) = Json.obj(
       "lastPlayBuild" -> prunePersistentState.lastPlayBuild,
-      "lastTestBuilds" -> prunePersistentState.lastTestBuilds
+      "lastAppBuilds" -> prunePersistentState.lastAppBuilds
     )
   }
 
   implicit val reads: Reads[PrunePersistentState] = (
     (JsPath \ "lastPlayBuild").readNullable[UUID] and
-    (JsPath \ "lastTestBuilds").read[Map[String,UUID]]
+    (JsPath \ "lastAppBuilds").read[Map[String,UUID]]
   )(PrunePersistentState.apply _)
 
   def path(implicit ctx: Context): Path = {
@@ -98,6 +98,12 @@ object PrunePersistentState {
 
   def read(implicit ctx: Context): Option[PrunePersistentState] = {
     Records.readFile[PrunePersistentState](path)
+  }
+
+  def readOrElse(implicit ctx: Context): PrunePersistentState = {
+    read.getOrElse(PrunePersistentState(
+      lastPlayBuild = None, lastAppBuilds = Map.empty
+    ))
   }
 
   def write(state: PrunePersistentState)(implicit ctx: Context): Unit = {
@@ -210,45 +216,45 @@ object PlayBuildRecord {
 
 }
 
-case class TestBuildRecord(
+case class AppBuildRecord(
   playBuildId: UUID,
-  testProject: String,
-  testsCommit: String,
+  appName: String,
+  appsCommit: String,
   javaVersionExecution: Execution,
   buildExecutions: Seq[Execution]
 )
 
-object TestBuildRecord {
+object AppBuildRecord {
 
-  implicit val writes = new Writes[TestBuildRecord] {
-    def writes(testBuildRecord: TestBuildRecord) = Json.obj(
+  implicit val writes = new Writes[AppBuildRecord] {
+    def writes(testBuildRecord: AppBuildRecord) = Json.obj(
       "playBuildId" -> testBuildRecord.playBuildId,
-      "testProject" -> testBuildRecord.testProject,
-      "testsCommit" -> testBuildRecord.testsCommit,
+      "appName" -> testBuildRecord.appName,
+      "appsCommit" -> testBuildRecord.appsCommit,
       "javaVersionExecution" -> testBuildRecord.javaVersionExecution,
       "buildExecutions" -> testBuildRecord.buildExecutions
     )
   }
 
-  implicit val reads: Reads[TestBuildRecord] = (
+  implicit val reads: Reads[AppBuildRecord] = (
     (JsPath \ "playBuildId").read[UUID] and
-    (JsPath \ "testProject").read[String] and
-    (JsPath \ "testsCommit").read[String] and
+    (JsPath \ "appName").read[String] and
+    (JsPath \ "appsCommit").read[String] and
     (JsPath \ "javaVersionExecution").read[Execution] and
     (JsPath \ "buildExecutions").read[Seq[Execution]]
-  )(TestBuildRecord.apply _)
+  )(AppBuildRecord.apply _)
 
   def path(id: UUID)(implicit ctx: Context): Path = {
-    Paths.get(ctx.dbHome, "test-builds", id.toString+".json")
+    Paths.get(ctx.dbHome, "app-builds", id.toString+".json")
   }
-  def write(id: UUID, record: TestBuildRecord)(implicit ctx: Context): Unit = {
+  def write(id: UUID, record: AppBuildRecord)(implicit ctx: Context): Unit = {
     Records.writeFile(path(id), record)
   }
-  def read(id: UUID)(implicit ctx: Context): Option[TestBuildRecord] = {
-    Records.readFile[TestBuildRecord](path(id))
+  def read(id: UUID)(implicit ctx: Context): Option[AppBuildRecord] = {
+    Records.readFile[AppBuildRecord](path(id))
   }
-  def readAll(implicit ctx: Context): Map[UUID,TestBuildRecord] = {
-    Records.readAll[TestBuildRecord](Paths.get(ctx.dbHome, "test-builds"))
+  def readAll(implicit ctx: Context): Map[UUID,AppBuildRecord] = {
+    Records.readAll[AppBuildRecord](Paths.get(ctx.dbHome, "app-builds"))
   }
 
 }
@@ -273,7 +279,7 @@ case class Command(
 }
 
 case class TestRunRecord(
-  testBuildId: UUID,
+  appBuildId: UUID,
   testName: String,
   javaVersionExecution: Execution,
   serverExecution: Execution,
@@ -284,7 +290,7 @@ object TestRunRecord {
 
   implicit val writes = new Writes[TestRunRecord] {
     def writes(testBuildRecord: TestRunRecord) = Json.obj(
-      "testBuildId" -> testBuildRecord.testBuildId,
+      "appBuildId" -> testBuildRecord.appBuildId,
       "testName" -> testBuildRecord.testName,
       "javaVersionExecution" -> testBuildRecord.javaVersionExecution,
       "serverExecution" -> testBuildRecord.serverExecution,
@@ -293,7 +299,7 @@ object TestRunRecord {
   }
 
   implicit val reads: Reads[TestRunRecord] = (
-    (JsPath \ "testBuildId").read[UUID] and
+    (JsPath \ "appBuildId").read[UUID] and
     (JsPath \ "testName").read[String] and
     (JsPath \ "javaVersionExecution").read[Execution] and
     (JsPath \ "serverExecution").read[Execution] and
@@ -317,18 +323,18 @@ object TestRunRecord {
 
 case class DB(
   playBuilds: Map[UUID, PlayBuildRecord],
-  testBuilds: Map[UUID, TestBuildRecord],
+  appBuilds: Map[UUID, AppBuildRecord],
   testRuns: Map[UUID, TestRunRecord]
 )
 object DB {
   def read(implicit ctx: Context): DB = {
     val dbPath = Paths.get(ctx.dbHome)
     FileUtils.forceMkdir(dbPath.resolve("play-builds").toFile)
-    FileUtils.forceMkdir(dbPath.resolve("test-builds").toFile)
+    FileUtils.forceMkdir(dbPath.resolve("app-builds").toFile)
     FileUtils.forceMkdir(dbPath.resolve("test-runs").toFile)
     DB(
       PlayBuildRecord.readAll,
-      TestBuildRecord.readAll,
+      AppBuildRecord.readAll,
       TestRunRecord.readAll
     )
   }

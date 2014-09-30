@@ -22,13 +22,13 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import Exec._
 import PruneGit._
 
-object BuildTest {
-  def buildTestProject(
+object BuildApp {
+  def buildApp(
     playBranch: String,
     playCommit: String,
-    testsBranch: String,
-    testsCommit: String,
-    testProject: String)(implicit ctx: Context): TestBuildRecord = {
+    appsBranch: String,
+    appsCommit: String,
+    appName: String)(implicit ctx: Context): AppBuildRecord = {
 
     BuildPlay.buildPlay(playBranch = playBranch, playCommit = playCommit)
 
@@ -36,7 +36,7 @@ object BuildTest {
       Command(
         "sbt",
         Seq("-Dsbt.ivy.home=<ivy.home>", "stage"),
-        workingDir = s"<tests.home>/$testProject",
+        workingDir = s"<tests.home>/$appName",
         env = Map(
           "JAVA_HOME" -> "<java8.home>"
         )
@@ -49,33 +49,33 @@ object BuildTest {
       sys.error("Play must be built before tests can be built")
     }
 
-    val lastTestBuildId: Option[UUID] = PrunePersistentState.read.flatMap(_.lastTestBuilds.get(testProject))
-    val lastTestBuildRecord: Option[TestBuildRecord] = lastTestBuildId.flatMap(TestBuildRecord.read)
-    val reasonsToBuild: Seq[String] = lastTestBuildRecord.fold(Seq("No existing build record")) { buildRecord =>
+    val lastAppBuildId: Option[UUID] = PrunePersistentState.read.flatMap(_.lastAppBuilds.get(appName))
+    val lastAppBuildRecord: Option[AppBuildRecord] = lastAppBuildId.flatMap(AppBuildRecord.read)
+    val reasonsToBuild: Seq[String] = lastAppBuildRecord.fold(Seq("No existing app build record")) { buildRecord =>
       val differentPlayBuild = if (buildRecord.playBuildId == lastPlayBuildId) Seq() else Seq("Play build has changed")
-      val differentCommit = if (buildRecord.testsCommit == testsCommit) Seq() else Seq("Tests commit has changed")
+      val differentCommit = if (buildRecord.appsCommit == appsCommit) Seq() else Seq("Apps commit has changed")
       val differentJavaVersion = if (buildRecord.javaVersionExecution.stderr == javaVersionExecution.stderr) Seq() else Seq("Java version has changed")
-      val testBinary = Paths.get(ctx.testsHome, testProject, "target/universal/stage/bin", testProject)
-      val missingTestBinary = if (Files.exists(testBinary)) Seq() else Seq("Test binary is missing")
+      val testBinary = Paths.get(ctx.appsHome, appName, "target/universal/stage/bin", appName)
+      val missingTestBinary = if (Files.exists(testBinary)) Seq() else Seq("App binary is missing")
       // TODO: Check previous build commands are OK
       differentPlayBuild ++ differentCommit ++ differentJavaVersion ++ missingTestBinary
     }
 
     if (reasonsToBuild.isEmpty) {
-      println(s"Test $testProject already built: ${lastTestBuildId.get}")
-      lastTestBuildRecord.get
+      println(s"App $appName already built: ${lastAppBuildId.get}")
+      lastAppBuildRecord.get
     } else {
-      val newTestBuildId = UUID.randomUUID()
-      println(s"Starting build for $testProject test $newTestBuildId: "+(reasonsToBuild.mkString(", ")))
+      val newAppBuildId = UUID.randomUUID()
+      println(s"Starting build for app $appName $newAppBuildId: "+(reasonsToBuild.mkString(", ")))
 
       gitCheckout(
-        localDir = ctx.testsHome,
-        branch = testsBranch,
-        commit = testsCommit)
+        localDir = ctx.appsHome,
+        branch = appsBranch,
+        commit = appsCommit)
 
       // Clear local target directory to ensure an isolated build
       {
-        val targetDir = Paths.get(ctx.testsHome, testProject, "target")
+        val targetDir = Paths.get(ctx.appsHome, appName, "target")
         if (Files.exists(targetDir)) {
           FileUtils.deleteDirectory(targetDir.toFile)
         }
@@ -83,17 +83,17 @@ object BuildTest {
 
       val buildExecutions = buildCommands.map(run(_, Pump))
 
-      val newTestBuildRecord = TestBuildRecord(
+      val newAppBuildRecord = AppBuildRecord(
         playBuildId = lastPlayBuildId,
-        testsCommit = testsCommit,
-        testProject = testProject,
+        appsCommit = appsCommit,
+        appName = appName,
         javaVersionExecution = javaVersionExecution,
         buildExecutions = buildExecutions
       )
-      TestBuildRecord.write(newTestBuildId, newTestBuildRecord)
-      val oldPersistentState = PrunePersistentState.read.get
-      PrunePersistentState.write(oldPersistentState.copy(lastTestBuilds = oldPersistentState.lastTestBuilds.updated(testProject, newTestBuildId)))
-      newTestBuildRecord
+      AppBuildRecord.write(newAppBuildId, newAppBuildRecord)
+      val oldPersistentState = PrunePersistentState.readOrElse
+      PrunePersistentState.write(oldPersistentState.copy(lastAppBuilds = oldPersistentState.lastAppBuilds.updated(appName, newAppBuildId)))
+      newAppBuildRecord
     }
 
   }

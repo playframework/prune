@@ -26,14 +26,14 @@ import PruneGit._
 case class TestTask(
   info: TestTaskInfo,
   playBranch: String,
-  testsBranch: String
+  appsBranch: String
 )
 
 case class TestTaskInfo(
   testName: String,
   playCommit: String,
-  testsCommit: String,
-  testProject: String
+  appsCommit: String,
+  appName: String
 )
 
 object Prune {
@@ -44,7 +44,7 @@ object Prune {
         c.copy(configFile = Some(s))
       }
       opt[Unit]("skip-fetches") action { (_, c) =>
-        c.copy(dbFetch = false, playFetch = false, testsFetch = false)
+        c.copy(dbFetch = false, playFetch = false, appsFetch = false)
       }
       opt[Unit]("skip-db-fetch") action { (_, c) =>
         c.copy(dbFetch = false)
@@ -52,8 +52,8 @@ object Prune {
       opt[Unit]("skip-play-fetch") action { (_, c) =>
         c.copy(playFetch = false)
       }
-      opt[Unit]("skip-tests-fetch") action { (_, c) =>
-        c.copy(testsFetch = false)
+      opt[Unit]("skip-apps-fetch") action { (_, c) =>
+        c.copy(appsFetch = false)
       }
     }
     val args = parser.parse(rawArgs, Args()).getOrElse(noReturnExit(1))
@@ -117,7 +117,7 @@ object Prune {
   def main(implicit ctx: Context): Unit = {
 
     val playBranches = ctx.playTests.map(_.playBranch).distinct
-    val testsBranches = ctx.playTests.map(_.testsBranch).distinct
+    val appsBranches = ctx.playTests.map(_.appsBranch).distinct
 
     println(s"Prune instance id is ${ctx.pruneInstanceId}")
 
@@ -135,13 +135,13 @@ object Prune {
       }
       fetch("Prune database records", ctx.args.dbFetch, ctx.dbRemote, Seq(ctx.dbBranch), ctx.dbHome)
       fetch("Play source code", ctx.args.playFetch, ctx.playRemote, playBranches, ctx.playHome)
-      fetch("tests source code", ctx.args.testsFetch, ctx.testsRemote, testsBranches, ctx.testsHome)
+      fetch("apps source code", ctx.args.appsFetch, ctx.appsRemote, appsBranches, ctx.appsHome)
     }
 
     val neededTasks: Seq[TestTask] = ctx.playTests.flatMap { playTest =>
       //println(s"Working out tests to run for $playTest")
 
-      val testsId: AnyObjectId = resolveId(ctx.testsHome, playTest.testsBranch, playTest.testsRevision)
+      val appsId: AnyObjectId = resolveId(ctx.appsHome, playTest.appsBranch, playTest.appsRevision)
       val revisions = gitLog(ctx.playHome, playTest.playBranch, playTest.playRevisionRange._1, playTest.playRevisionRange._2)
       val nonMergeRevisions = revisions.filter(_.parentCount == 1)
       nonMergeRevisions.flatMap { revision =>
@@ -150,11 +150,11 @@ object Prune {
             info = TestTaskInfo(
               testName = testName,
               playCommit = revision.id,
-              testsCommit = testsId.getName,
-              testProject = "scala-bench"
+              appsCommit = appsId.getName,
+              appName = "scala-bench"
             ),
             playBranch = playTest.playBranch,
-            testsBranch = playTest.testsBranch
+            appsBranch = playTest.appsBranch
           )
         }
       }
@@ -167,14 +167,14 @@ object Prune {
       db.testRuns.foldLeft[Seq[TestTaskInfo]](Seq.empty) {
         case (tasks, (_, testRunRecord)) =>
           val optTask: Option[TestTaskInfo] = for {
-            testBuildRecord <- db.testBuilds.get(testRunRecord.testBuildId)
-            playBuildRecord <- db.playBuilds.get(testBuildRecord.playBuildId)
+            appBuildRecord <- db.appBuilds.get(testRunRecord.appBuildId)
+            playBuildRecord <- db.playBuilds.get(appBuildRecord.playBuildId)
             if playBuildRecord.pruneInstanceId == ctx.pruneInstanceId
           } yield TestTaskInfo(
             testName = testRunRecord.testName,
             playCommit = playBuildRecord.playCommit,
-            testsCommit = testBuildRecord.testsCommit,
-            testProject = testBuildRecord.testProject
+            appsCommit = appBuildRecord.appsCommit,
+            appName = appBuildRecord.appName
           )
           tasks ++ optTask.toSeq
       }
@@ -184,7 +184,7 @@ object Prune {
     val tasksToRun: Seq[TestTask] = neededTasks.filter(task => !completedTaskInfos.contains(task.info))
     val playCommitsToRunCount: Int = tasksToRun.map(_.info.playCommit).distinct.size
 
-    println(s"Prune tests already executed: ${completedPlayCommitCount} Play revisions, ${completedTaskInfos.size}  test runs")
+    println(s"Prune tests already executed: ${completedPlayCommitCount} Play revisions, ${completedTaskInfos.size} test runs")
     println(s"Prune tests needed: ${neededPlayCommitCount} Play revisions, ${neededTasks.size} test runs")
     println(s"Prune tests remaining: ${playCommitsToRunCount} Play revisions, ${tasksToRun.size} test runs")
 

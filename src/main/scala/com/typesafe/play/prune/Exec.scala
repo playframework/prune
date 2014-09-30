@@ -17,12 +17,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 object Exec {
 
-  // private case class PreparedCommand(
-  //   commandLine: CommandLine,
-  //   environment: JMap[String, String],
-  //   workingDir: File
-  // )
-
   private case class Prepared(
     executor: DefaultExecutor,
     commandLine: CommandLine,
@@ -40,7 +34,7 @@ object Exec {
       val replacements: Map[String,String] = Map(
         "prune.home" -> ctx.pruneHome,
         "play.home" -> ctx.playHome,
-        "tests.home" -> ctx.testsHome,
+        "tests.home" -> ctx.appsHome,
         "java8.home" -> ctx.java8Home,
         "ivy.home" -> ctx.ivyHome
       )

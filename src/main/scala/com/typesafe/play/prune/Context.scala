@@ -27,8 +27,8 @@ case class Context(
   val playRemote = config.getString("playRemote")
   val playHome = config.getString("playHome")
 
-  val testsRemote = config.getString("testsRemote")
-  val testsHome = config.getString("testsHome")
+  val appsRemote = config.getString("appsRemote")
+  val appsHome = config.getString("appsHome")
 
   val dbRemote = config.getString("dbRemote")
   val dbBranch = config.getString("dbBranch")
@@ -45,8 +45,8 @@ case class Context(
           }
           (split(0), split(1))
         },
-        testsBranch = c.getString("testsBranch"),
-        testsRevision = c.getString("testsRevision"),
+        appsBranch = c.getString("appsBranch"),
+        appsRevision = c.getString("appsRevision"),
         testNames = asScalaBuffer(c.getStringList("testNames"))
       )
     }
@@ -57,12 +57,12 @@ case class Args(
   configFile: Option[String] = None,
   dbFetch: Boolean = true,
   playFetch: Boolean = true,
-  testsFetch: Boolean = true)
+  appsFetch: Boolean = true)
 
 case class PlayTestsConfig(
   playBranch: String,
   playRevisionRange: (String, String),
-  testsBranch: String,
-  testsRevision: String,
+  appsBranch: String,
+  appsRevision: String,
   testNames: Seq[String]
 )
