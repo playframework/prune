@@ -25,37 +25,42 @@ import PruneGit._
 object RunTest {
 
   def runTestTask(testTask: TestTask)(implicit ctx: Context): Unit = {
-    // println(s"Preparing test ${testTask.name}")
+    import testTask.info.{ appName, testName }
     BuildApp.buildApp(
       playBranch = testTask.playBranch,
       playCommit = testTask.info.playCommit,
       appsBranch = testTask.appsBranch,
       appsCommit = testTask.info.appsCommit,
-      appName = testTask.info.appName
+      appName = appName
     )
 
     val stageDirRelativePath = "target/universal/stage"
     // val stageDir: Path = testDir.resolve())
     // val pidFile: Path = stageDir.resolve("RUNNING_PID")
-    val pidFile: Path = Paths.get(ctx.appsHome, testTask.info.appName, stageDirRelativePath, "RUNNING_PID")
+    val pidFile: Path = Paths.get(ctx.appsHome, appName, stageDirRelativePath, "RUNNING_PID")
 
     if (Files.exists(pidFile)) {
-      println(s"Can't run test app ${testTask.info.appName} because $pidFile already exists")
+      println(s"Can't run test app ${appName} because $pidFile already exists")
       return
     }
 
     val javaVersionExecution: Execution = JavaVersion.captureJavaVersion()
 
     val testRunId = UUID.randomUUID()
-    println(s"Starting test ${testTask.info.testName} run $testRunId")
+    println(s"Starting test ${testName} run $testRunId")
+    
+    val testConfig = ctx.testConfig.get(testName).getOrElse(sys.error(s"No test config for test $testName"))
 
-    // println("Starting test app scala-bench")
-    val terminateServer: () => Execution = runAsync(
+    if (canConnectTo("localhost", 9000, timeout = 50)) {
+      sys.error("Can't start server: port already in use")
+    }
+
+      val terminateServer: () => Execution = runAsync(
     // val serverE = run(
       Command(
-        s"bin/${testTask.info.appName}",
+        s"bin/${appName}",
         args = Seq(),
-        workingDir = s"<tests.home>/${testTask.info.appName}/$stageDirRelativePath",
+        workingDir = s"<tests.home>/${appName}/$stageDirRelativePath",
         env = Map(
           "JAVA_HOME" -> "<java8.home>",
           "JAVA_OPTS" -> ctx.config.getString("java8.opts")
@@ -74,13 +79,6 @@ object RunTest {
       }
 
       {
-        // TODO: Move test details to configuration
-        val requestPath: String = testTask.info.testName match {
-          case "scala-hello-world" => "/helloworld"
-          case "scala-download-50k" => "/download/51200"
-          case "scala-download-chunked-50k" => "/download-chunked/51200"
-          case name => sys.error(s"Unknown test name: $name")
-        }
 
         // TODO: Capture wrk version
 
@@ -88,13 +86,16 @@ object RunTest {
           val wrkConfig = ctx.config.getConfig("wrk")
           val threads = wrkConfig.getInt("threads")
           val connections = wrkConfig.getInt("connections")
-          val duration = wrkConfig.getDuration(durationConfigName, TimeUnit.SECONDS)
+          val duration = if (ctx.args.quickTests) {
+            println("Overriding wrk duration so it runs more quickly")
+            2
+          } else wrkConfig.getDuration(durationConfigName, TimeUnit.SECONDS)
 
-          println(s"Running wrk on $requestPath for ${duration}s")
+          println(s"Running wrk with "+testConfig.wrkArgs.mkString(" ")+s" for ${duration}s")
           run(
             Command(
               program = "wrk",
-              args = Seq(s"-t$threads", s"-c$connections", s"-d${duration}s", s"http://localhost:9000$requestPath"),
+              args = Seq(s"-t$threads", s"-c$connections", s"-d${duration}s", "--latency") ++ testConfig.wrkArgs,
               env = Map(),
               workingDir = "<prune.home>"
             ),
@@ -109,8 +110,8 @@ object RunTest {
         val serverExecution = terminateServer()
 
         val testRunRecord = TestRunRecord(
-          appBuildId = PrunePersistentState.read.flatMap(_.lastAppBuilds.get(testTask.info.appName)).get,
-          testName = testTask.info.testName,
+          appBuildId = PrunePersistentState.read.flatMap(_.lastAppBuilds.get(appName)).get,
+          testName = testName,
           javaVersionExecution = javaVersionExecution,
           serverExecution = serverExecution,
           wrkExecutions = Seq(

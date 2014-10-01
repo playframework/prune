@@ -55,6 +55,12 @@ object Prune {
       opt[Unit]("skip-apps-fetch") action { (_, c) =>
         c.copy(appsFetch = false)
       }
+      opt[Unit]("quick-tests") action { (_, c) =>
+        c.copy(quickTests = true)
+      }
+      opt[Int]("max-test-runs") action { (i, c) =>
+        c.copy(maxTestRuns = Some(i))
+      }
     }
     val args = parser.parse(rawArgs, Args()).getOrElse(noReturnExit(1))
 
@@ -188,7 +194,14 @@ object Prune {
     println(s"Prune tests needed: ${neededPlayCommitCount} Play revisions, ${neededTasks.size} test runs")
     println(s"Prune tests remaining: ${playCommitsToRunCount} Play revisions, ${tasksToRun.size} test runs")
 
-    tasksToRun.foreach(RunTest.runTestTask)
+    val truncatedTasksToRun = ctx.args.maxTestRuns.fold(tasksToRun) { i =>
+      if (tasksToRun.size > i) {
+        println(s"Overriding number of test runs down to $i")
+        tasksToRun.take(i)
+      } else tasksToRun
+    }
+
+    truncatedTasksToRun.foreach(RunTest.runTestTask)
   }
 
 }

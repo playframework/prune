@@ -51,13 +51,30 @@ case class Context(
       )
     }
   }
+
+//  private def getEntryNames(c: Config): Seq[String] = iterableAsScalaIterable(config.entrySet).to[Seq].foldLeft[Seq[String]](Seq.empty) {
+//    case (names, entry) => names :+ entry.getKey
+//  }
+
+  val testConfig: Map[String, TestConfig] = {
+    asScalaBuffer(config.getConfigList("tests")).foldLeft[Map[String, TestConfig]](Map.empty) {
+      case (m, entry) =>
+        m.updated(entry.getString("name"), TestConfig(
+        app = entry.getString("app"),
+        description = entry.getString("description"),
+        wrkArgs = asScalaBuffer(entry.getStringList("wrkArgs"))
+      ))
+    }
+  }
 }
 
 case class Args(
   configFile: Option[String] = None,
   dbFetch: Boolean = true,
   playFetch: Boolean = true,
-  appsFetch: Boolean = true)
+  appsFetch: Boolean = true,
+  quickTests: Boolean = false,
+  maxTestRuns: Option[Int] = None)
 
 case class PlayTestsConfig(
   playBranch: String,
@@ -65,4 +82,10 @@ case class PlayTestsConfig(
   appsBranch: String,
   appsRevision: String,
   testNames: Seq[String]
+)
+
+case class TestConfig(
+  app: String,
+  description: String,
+  wrkArgs: Seq[String]
 )

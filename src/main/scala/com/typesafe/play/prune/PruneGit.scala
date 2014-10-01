@@ -41,7 +41,8 @@ object PruneGit {
     localDir: String,
     branches: Seq[String]): Unit = {
 
-    println(s"Syncing $remote branches $branches into $localDir...")
+    val branchesString = branches.mkString("[", ", ", "]")
+    println(s"Syncing $remote branches $branchesString into $localDir...")
 
     val localDirPath = Paths.get(localDir)
     if (Files.notExists(localDirPath)) {
