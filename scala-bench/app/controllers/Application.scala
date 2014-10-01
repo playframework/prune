@@ -10,7 +10,7 @@ import play.api.libs.concurrent.Execution.Implicits.defaultContext
 
 object Application extends Controller {
 
-  def helloworld = Action(parse.empty) { request =>
+  def simple = Action(parse.empty) { request =>
     Ok("Hello world.")
   }
 

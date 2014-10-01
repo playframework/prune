@@ -1,4 +1,4 @@
-GET   /helloworld               controllers.Application.helloworld
+GET   /simple                   controllers.Application.simple
 GET   /download/:length         controllers.Application.download(length: Int)
 GET   /download-chunked/:length controllers.Application.downloadChunked(length: Int)
 PUT   /upload                   controllers.Application.upload
