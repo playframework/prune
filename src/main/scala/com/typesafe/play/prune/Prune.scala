@@ -144,12 +144,8 @@ object Prune {
       fetch("apps source code", ctx.args.appsFetch, ctx.appsRemote, appsBranches, ctx.appsHome)
     }
 
-    def playCommitsToTest(playTestConfig: PlayTestsConfig): Seq[String] = {
-      val revisions = gitLog(ctx.playHome, playTestConfig.playBranch, playTestConfig.playRevisionRange._1, playTestConfig.playRevisionRange._2)
-      revisions.collect {
-        case LogEntry(id, 1, _) => id
-      }
-    }
+    def playCommitsToTest(playTestConfig: PlayTestsConfig): Seq[String] =
+      gitFirstParentsLog(ctx.playHome, playTestConfig.playBranch, playTestConfig.playRevisionRange._1, playTestConfig.playRevisionRange._2)
 
     val neededTasks: Seq[TestTask] = ctx.playTests.flatMap { playTest =>
       //println(s"Working out tests to run for $playTest")

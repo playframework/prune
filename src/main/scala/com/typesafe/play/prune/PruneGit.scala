@@ -90,4 +90,29 @@ object PruneGit {
     }
   }
 
+  def gitFirstParentsLog(localDir: String, branch: String, startRev: String, endRev: String): Seq[String] = {
+    withRepository(localDir) { repository =>
+      val startId: AnyObjectId = resolveId(localDir, branch, startRev)
+      val endId: AnyObjectId = resolveId(localDir, branch, endRev)
+      // println(s"Logging from $startId to $endId")
+
+      val logWalk = new Git(repository).log().addRange(startId, endId).call()
+      val iterator = logWalk.iterator()
+
+      @scala.annotation.tailrec
+      def walkBackwards(results: Seq[String], next: AnyObjectId): Seq[String] = {
+        if (iterator.hasNext) {
+          val commit = iterator.next()
+          val current = commit.getId
+          if (current == next) {
+            walkBackwards(results :+ next.name, commit.getParent(0).getId)
+          } else {
+            walkBackwards(results, next)
+          }
+        } else results
+      }
+      walkBackwards(Seq.empty, endId)
+    }
+  }
+
 }
