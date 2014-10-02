@@ -32,6 +32,7 @@ object Exec {
 
     def configureCommand(command: Command): Command = {
       val replacements: Map[String,String] = Map(
+        "assets.home" -> ctx.assetsHome,
         "prune.home" -> ctx.pruneHome,
         "play.home" -> ctx.playHome,
         "tests.home" -> ctx.appsHome,

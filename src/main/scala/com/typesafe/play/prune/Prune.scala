@@ -144,18 +144,24 @@ object Prune {
       fetch("apps source code", ctx.args.appsFetch, ctx.appsRemote, appsBranches, ctx.appsHome)
     }
 
+    def playCommitsToTest(playTestConfig: PlayTestsConfig): Seq[String] = {
+      val revisions = gitLog(ctx.playHome, playTestConfig.playBranch, playTestConfig.playRevisionRange._1, playTestConfig.playRevisionRange._2)
+      revisions.collect {
+        case LogEntry(id, 1, _) => id
+      }
+    }
+
     val neededTasks: Seq[TestTask] = ctx.playTests.flatMap { playTest =>
       //println(s"Working out tests to run for $playTest")
 
       val appsId: AnyObjectId = resolveId(ctx.appsHome, playTest.appsBranch, playTest.appsRevision)
-      val revisions = gitLog(ctx.playHome, playTest.playBranch, playTest.playRevisionRange._1, playTest.playRevisionRange._2)
-      val nonMergeRevisions = revisions.filter(_.parentCount == 1)
-      nonMergeRevisions.flatMap { revision =>
+      val playCommits = playCommitsToTest(playTest)
+      playCommits.flatMap { playCommit =>
         playTest.testNames.map { testName =>
           TestTask(
             info = TestTaskInfo(
               testName = testName,
-              playCommit = revision.id,
+              playCommit = playCommit,
               appsCommit = appsId.getName,
               appName = "scala-bench"
             ),
@@ -168,21 +174,15 @@ object Prune {
     val neededPlayCommitCount: Int = neededTasks.map(_.info.playCommit).distinct.size
 
     val completedTaskInfos: Seq[TestTaskInfo] = {
-      val db = DB.read
-      //println(s"DB: $db")
-      db.testRuns.foldLeft[Seq[TestTaskInfo]](Seq.empty) {
-        case (tasks, (_, testRunRecord)) =>
-          val optTask: Option[TestTaskInfo] = for {
-            appBuildRecord <- db.appBuilds.get(testRunRecord.appBuildId)
-            playBuildRecord <- db.playBuilds.get(appBuildRecord.playBuildId)
-            if playBuildRecord.pruneInstanceId == ctx.pruneInstanceId
-          } yield TestTaskInfo(
-            testName = testRunRecord.testName,
-            playCommit = playBuildRecord.playCommit,
-            appsCommit = appBuildRecord.appsCommit,
-            appName = appBuildRecord.appName
+      DB.foldLeft[Seq[TestTaskInfo]](Seq.empty) {
+        case (infos, join) =>
+          val info = TestTaskInfo(
+            testName = join.testRunRecord.testName,
+            playCommit = join.playBuildRecord.playCommit,
+            appsCommit = join.appBuildRecord.appsCommit,
+            appName = join.appBuildRecord.appName
           )
-          tasks ++ optTask.toSeq
+          infos :+ info
       }
     }
     val completedPlayCommitCount: Int = completedTaskInfos.map(_.playCommit).distinct.size
@@ -201,7 +201,51 @@ object Prune {
       } else tasksToRun
     }
 
+    Assets.extractAssets
+
     truncatedTasksToRun.foreach(RunTest.runTestTask)
+
+    {
+      type PlayRev = String
+      case class TestResult(
+        testRunId: UUID,
+        wrkOutput: Option[String]
+      )
+
+      def getResults(playCommits: Seq[PlayRev], testName: String): Map[PlayRev, TestResult] = {
+        DB.foldLeft[Map[PlayRev,TestResult]](Map.empty) {
+          case (results, join) =>
+            if (
+              join.pruneInstanceId == ctx.pruneInstanceId &&
+              join.testRunRecord.testName == testName &&
+              playCommits.contains(join.playBuildRecord.playCommit)) {
+              results.updated(join.playBuildRecord.playCommit, TestResult(
+                testRunId = join.testRunId,
+                wrkOutput = join.testRunRecord.wrkExecutions.last.stdout
+              ))
+            } else results
+        }
+      }
+
+      for {
+        playTestConfig <- ctx.playTests
+        testName <- playTestConfig.testNames
+      } {
+        val playCommits = playCommitsToTest(playTestConfig)
+        val resultMap = getResults(playCommits, testName)
+        println(s"Test $testName on ${playTestConfig.playBranch}")
+        for (playCommit <- playCommits) {
+          val wrkOutput: Option[String] = resultMap.get(playCommit).flatMap(_.wrkOutput)
+          val wrkResult: Option[WrkResult] = wrkOutput.flatMap(Results.parseWrkOutput)
+          val resultDisplay: String = wrkResult.map { wr =>
+            s"Requests/s: ${wr.requestsPerSecond.mean}, "+
+            s"Latency 50%: ${wr.latency.percentiles(50)}, " +
+            s"Latency 95%: ${wr.latency.percentiles(95)}"
+          }.getOrElse("-")
+          println(s"${playCommit.substring(0,7)} $resultDisplay")
+        }
+      }
+    }
   }
 
 }

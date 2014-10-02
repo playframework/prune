@@ -34,6 +34,8 @@ case class Context(
   val dbBranch = config.getString("dbBranch")
   val dbHome = config.getString("dbHome")
 
+  val assetsHome = config.getString("assetsHome")
+
   val playTests: Seq[PlayTestsConfig] = {
     asScalaBuffer(config.getConfigList("playTests")).map { c: Config =>
       PlayTestsConfig(

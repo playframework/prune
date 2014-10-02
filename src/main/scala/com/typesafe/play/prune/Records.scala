@@ -32,10 +32,16 @@ object Records {
   }
 
   def readAll[T](dir: Path)(implicit ctx: Context, reads: Reads[T]): Map[UUID,T] = {
+    foldLeftAll[T, Map[UUID,T]](dir, Map.empty) {
+      case (m, id, record) => m.updated(id, record)
+    }
+  }
+
+  def foldLeftAll[T,A](dir: Path, x0: A)(f: (A, UUID, T) => A)(implicit ctx: Context, reads: Reads[T]): A = {
     val files = collectionAsScalaIterable(FileUtils.listFiles(dir.toFile, Array("json"), true))
-    files.foldLeft(Map.empty[UUID,T]) {
-      case (m, f) =>
-        val p = f.toPath
+    files.foldLeft(x0) {
+      case (x, file) =>
+        val p = file.toPath
         val id: UUID = {
           val fileName = p.getFileName.toString
           val dotIndex = fileName.lastIndexOf('.')
@@ -44,7 +50,7 @@ object Records {
           UUID.fromString(baseFileName)
         }
         val record: T = Records.readFile[T](p).getOrElse(sys.error(s"Expected record at $p"))
-        m.updated(id, record)
+        f(x, id, record)
     }
   }
 
@@ -337,6 +343,37 @@ object DB {
       AppBuildRecord.readAll,
       TestRunRecord.readAll
     )
+  }
+  case class Join(
+    pruneInstanceId: UUID,
+    playBuildId: UUID,
+    playBuildRecord: PlayBuildRecord,
+    appBuildId: UUID,
+    appBuildRecord: AppBuildRecord,
+    testRunId: UUID,
+    testRunRecord: TestRunRecord
+  )
+  def foldLeft[A](x0: A)(f: (A, Join) => A)(implicit ctx: Context): A = {
+    val testRunsDir = Paths.get(ctx.dbHome, "test-runs")
+    Records.foldLeftAll[TestRunRecord, A](testRunsDir, x0) {
+      case (x, testRunId, testRunRecord) =>
+        val appBuildId = testRunRecord.appBuildId
+        val optJoin: Option[Join] = for {
+          appBuildRecord <- AppBuildRecord.read(appBuildId)
+          playBuildId = appBuildRecord.playBuildId
+          playBuildRecord <- PlayBuildRecord.read(playBuildId)
+          pruneInstanceId = playBuildRecord.pruneInstanceId
+        } yield Join(
+          pruneInstanceId,
+          playBuildId,
+          playBuildRecord,
+          appBuildId,
+          appBuildRecord,
+          testRunId,
+          testRunRecord
+        )
+        optJoin.fold(x)(join => f(x, join))
+    }
   }
 
 }

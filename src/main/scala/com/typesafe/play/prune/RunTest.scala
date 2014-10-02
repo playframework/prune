@@ -3,24 +3,11 @@
  */
 package com.typesafe.play.prune
 
-import java.io._
 import java.nio.file._
-import java.util.{ List => JList, Map => JMap, UUID }
+import java.util.UUID
 import java.util.concurrent.TimeUnit
-import org.apache.commons.io.{ FileUtils, IOUtils }
-import org.apache.commons.exec._
-import org.eclipse.jgit.api.Git
-import org.eclipse.jgit.lib._
-import org.eclipse.jgit.revwalk._
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder
-import org.joda.time._
-import scala.collection.JavaConversions
-import scala.concurrent._
-import scala.concurrent.duration.Duration
-import scala.concurrent.ExecutionContext.Implicits.global
 
 import Exec._
-import PruneGit._
 
 object RunTest {
 
@@ -95,7 +82,7 @@ object RunTest {
           run(
             Command(
               program = "wrk",
-              args = Seq(s"-t$threads", s"-c$connections", s"-d${duration}s", "--latency") ++ testConfig.wrkArgs,
+              args = Seq(s"-t$threads", s"-c$connections", s"-d${duration}s", "-s<assets.home>/wrk_report.lua") ++ testConfig.wrkArgs,
               env = Map(),
               workingDir = "<prune.home>"
             ),
