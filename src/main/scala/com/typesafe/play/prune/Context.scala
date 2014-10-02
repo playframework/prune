@@ -75,8 +75,8 @@ case class Args(
   dbFetch: Boolean = true,
   playFetch: Boolean = true,
   appsFetch: Boolean = true,
-  quickTests: Boolean = false,
-  maxTestRuns: Option[Int] = None)
+  maxTestRuns: Option[Int] = None,
+  maxWrkDuration: Option[Int] = None)
 
 case class PlayTestsConfig(
   playBranch: String,

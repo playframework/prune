@@ -26,13 +26,13 @@ import PruneGit._
 case class TestTask(
   info: TestTaskInfo,
   playBranch: String,
-  appsBranch: String
+  appsBranch: String,
+  appsCommit: String
 )
 
 case class TestTaskInfo(
   testName: String,
   playCommit: String,
-  appsCommit: String,
   appName: String
 )
 
@@ -55,11 +55,11 @@ object Prune {
       opt[Unit]("skip-apps-fetch") action { (_, c) =>
         c.copy(appsFetch = false)
       }
-      opt[Unit]("quick-tests") action { (_, c) =>
-        c.copy(quickTests = true)
-      }
       opt[Int]("max-test-runs") action { (i, c) =>
         c.copy(maxTestRuns = Some(i))
+      }
+      opt[Int]("max-wrk-duration") action { (i, c) =>
+        c.copy(maxWrkDuration = Some(i))
       }
     }
     val args = parser.parse(rawArgs, Args()).getOrElse(noReturnExit(1))
@@ -162,11 +162,11 @@ object Prune {
             info = TestTaskInfo(
               testName = testName,
               playCommit = playCommit,
-              appsCommit = appsId.getName,
               appName = "scala-bench"
             ),
             playBranch = playTest.playBranch,
-            appsBranch = playTest.appsBranch
+            appsBranch = playTest.appsBranch,
+            appsCommit = appsId.getName
           )
         }
       }
@@ -179,7 +179,6 @@ object Prune {
           val info = TestTaskInfo(
             testName = join.testRunRecord.testName,
             playCommit = join.playBuildRecord.playCommit,
-            appsCommit = join.appBuildRecord.appsCommit,
             appName = join.appBuildRecord.appName
           )
           infos :+ info

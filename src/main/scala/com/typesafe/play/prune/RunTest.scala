@@ -17,7 +17,7 @@ object RunTest {
       playBranch = testTask.playBranch,
       playCommit = testTask.info.playCommit,
       appsBranch = testTask.appsBranch,
-      appsCommit = testTask.info.appsCommit,
+      appsCommit = testTask.appsCommit,
       appName = appName
     )
 
@@ -73,10 +73,15 @@ object RunTest {
           val wrkConfig = ctx.config.getConfig("wrk")
           val threads = wrkConfig.getInt("threads")
           val connections = wrkConfig.getInt("connections")
-          val duration = if (ctx.args.quickTests) {
-            println("Overriding wrk duration so it runs more quickly")
-            2
-          } else wrkConfig.getDuration(durationConfigName, TimeUnit.SECONDS)
+          val duration = {
+            val configuredDuration = wrkConfig.getDuration(durationConfigName, TimeUnit.SECONDS)
+            ctx.args.maxWrkDuration.fold(configuredDuration) { i =>
+              if (i < configuredDuration) {
+                println(s"Overriding wrk duration from $configuredDuration down to $i")
+                i
+              } else configuredDuration
+            }
+          }
 
           println(s"Running wrk with "+testConfig.wrkArgs.mkString(" ")+s" for ${duration}s")
           run(
