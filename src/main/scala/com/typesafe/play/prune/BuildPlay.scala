@@ -44,7 +44,7 @@ object BuildPlay {
     val lastPlayBuildId: Option[UUID] = PrunePersistentState.read.flatMap(_.lastPlayBuild)
     val lastPlayBuildRecord: Option[PlayBuildRecord] = lastPlayBuildId.flatMap(PlayBuildRecord.read)
     val reasonsToBuild: Seq[String] = lastPlayBuildRecord.fold(Seq("No existing build record")) { buildRecord =>
-      val differentCommit = if (buildRecord.playCommit == playCommit) Seq() else Seq("Play commit has changed")
+      val differentCommit = if (buildRecord.playCommit == playCommit) Seq() else Seq(s"Play commit has changed to ${playCommit.substring(0,7)}")
       val differentJavaVersion = if (buildRecord.javaVersionExecution.stderr == javaVersionExecution.stderr) Seq() else Seq("Java version has changed")
       val emptyIvyDirectory = if (Files.exists(localIvyRepository)) Seq() else Seq("Local Ivy repository is missing")
       // TODO: Check previous build commands are OK

@@ -4,24 +4,10 @@
 package com.typesafe.play.prune
 
 import com.typesafe.config.{ Config, ConfigFactory }
-import java.io._
 import java.nio.file._
 import java.util.{ List => JList, Map => JMap, UUID }
-import java.util.concurrent.TimeUnit
 import org.apache.commons.io.{ FileUtils, IOUtils }
-import org.apache.commons.exec._
-import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib._
-import org.eclipse.jgit.revwalk._
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder
-import org.joda.time._
-import scala.concurrent._
-import scala.concurrent.duration.Duration
-import scala.concurrent.ExecutionContext.Implicits.global
-import scopt.OptionParser
-
-import Exec._
-import PruneGit._
 
 case class TestTask(
   info: TestTaskInfo,
@@ -48,6 +34,9 @@ object Prune {
       }
       opt[Unit]("skip-db-fetch") action { (_, c) =>
         c.copy(dbFetch = false)
+      }
+      opt[Unit]("db-push") action { (_, c) =>
+        c.copy(dbPush = true)
       }
       opt[Unit]("skip-play-fetch") action { (_, c) =>
         c.copy(playFetch = false)
@@ -128,29 +117,30 @@ object Prune {
     println(s"Prune instance id is ${ctx.pruneInstanceId}")
 
     {
-      def fetch(desc: String, switch: Boolean, remote: String, branches: Seq[String], localDir: String): Unit = {
+      def fetch(desc: String, switch: Boolean, remote: String, branches: Seq[String], checkedOutBranch: Option[String], localDir: String): Unit = {
         if (switch) {
           println(s"Fetching $desc from remote")
-          gitSync(
+          PruneGit.gitSync(
             remote = remote,
             branches = branches,
+            checkedOutBranch = checkedOutBranch,
             localDir = localDir)
         } else {
           println(s"Skipping fetch of $desc from remote")
         }
       }
-      fetch("Prune database records", ctx.args.dbFetch, ctx.dbRemote, Seq(ctx.dbBranch), ctx.dbHome)
-      fetch("Play source code", ctx.args.playFetch, ctx.playRemote, playBranches, ctx.playHome)
-      fetch("apps source code", ctx.args.appsFetch, ctx.appsRemote, appsBranches, ctx.appsHome)
+      fetch("Prune database records", ctx.args.dbFetch, ctx.dbRemote, Seq(ctx.dbBranch), Some(ctx.dbBranch), ctx.dbHome)
+      fetch("Play source code", ctx.args.playFetch, ctx.playRemote, playBranches, None, ctx.playHome)
+      fetch("apps source code", ctx.args.appsFetch, ctx.appsRemote, appsBranches, None, ctx.appsHome)
     }
 
     def playCommitsToTest(playTestConfig: PlayTestsConfig): Seq[String] =
-      gitFirstParentsLog(ctx.playHome, playTestConfig.playBranch, playTestConfig.playRevisionRange._1, playTestConfig.playRevisionRange._2)
+      PruneGit.gitFirstParentsLog(ctx.playHome, playTestConfig.playBranch, playTestConfig.playRevisionRange._1, playTestConfig.playRevisionRange._2)
 
     val neededTasks: Seq[TestTask] = ctx.playTests.flatMap { playTest =>
       //println(s"Working out tests to run for $playTest")
 
-      val appsId: AnyObjectId = resolveId(ctx.appsHome, playTest.appsBranch, playTest.appsRevision)
+      val appsId: AnyObjectId = PruneGit.resolveId(ctx.appsHome, playTest.appsBranch, playTest.appsRevision)
       val playCommits = playCommitsToTest(playTest)
       playCommits.flatMap { playCommit =>
         playTest.testNames.map { testName =>
@@ -241,6 +231,19 @@ object Prune {
         }
       }
     }
+
+    // Push database results
+    {
+      if (ctx.args.dbPush) {
+        PruneGit.gitPushChanges(
+          remote = ctx.dbRemote,
+          branch = ctx.dbBranch,
+          localDir = ctx.dbHome)
+      } else {
+        println(s"Not pushing results database: use --db-push argument to push results")
+      }
+    }
+
   }
 
 }

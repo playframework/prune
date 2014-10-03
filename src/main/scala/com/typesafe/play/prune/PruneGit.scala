@@ -12,6 +12,7 @@ import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib._
 import org.eclipse.jgit.revwalk._
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
+import org.eclipse.jgit.transport.{RemoteConfig, RefSpec}
 import scala.collection.JavaConversions
 import scala.collection.convert.WrapAsJava._
 import scala.collection.convert.WrapAsScala._
@@ -36,42 +37,85 @@ object PruneGit {
     }
   }
 
+  private def refSpec(branch: String): RefSpec = {
+    new RefSpec(s"refs/heads/$branch:refs/remotes/origin/$branch")
+  }
+
   def gitSync(
     remote: String,
     localDir: String,
-    branches: Seq[String]): Unit = {
+    branches: Seq[String],
+    checkedOutBranch: Option[String]): Unit = {
 
     val branchesString = branches.mkString("[", ", ", "]")
-    println(s"Syncing $remote branches $branchesString into $localDir...")
+    val desc = s"$remote $branchesString into $localDir"
 
     val localDirPath = Paths.get(localDir)
     if (Files.notExists(localDirPath)) {
+      println(s"Cloning $desc...")
       Files.createDirectories(localDirPath.getParent)
-      println(s"Cloning...")
-      Git.cloneRepository()
+      Git.cloneRepository
         .setURI(remote)
         .setBranchesToClone(seqAsJavaList(branches))
-        .setBranch(branches.head) // pick a random branch
-        .setDirectory(localDirPath.toFile)
-        .call()
+        .setBranch(checkedOutBranch.getOrElse(branches.head))
+        .setDirectory(localDirPath.toFile).call()
       println("Clone done.")
+    } else {
+      println(s"Fetching $desc...")
+      withRepository(localDir) { repository =>
+        validateRemoteOrigin(repository, remote)
+        val refSpecs = branches.map(refSpec)
+        new Git(repository)
+          .fetch()
+          .setRemote("origin")
+          .setRefSpecs(refSpecs: _*)
+          .call()
+      }
+      println("Fetch done")
     }
 
-    println("Fetching...")
-    withRepository(localDir) { repository =>
-      val result = new Git(repository)
-        .fetch()
-        .call();
-      // TODO: Add any missing branches, etc in case configuration
-      // has changed since initial clone.
-    }
-    println("Fetch done")
+  }
+
+  private def validateRemoteOrigin(repository: Repository, remote: String): Unit = {
+    val config = repository.getConfig
+    val remoteConfig = new RemoteConfig(config, "origin")
+    val existingURIs = remoteConfig.getURIs
+    assert(existingURIs.size == 1)
+    val existingRemote = existingURIs.get(0).toString
+    assert(existingRemote == remote, s"Remote URI for origin must be $remote, was $existingRemote")
   }
 
   def gitCheckout(localDir: String, branch: String, commit: String): Unit = {
     withRepository(localDir) { repository =>
       val result = new Git(repository).checkout().setName(branch).setStartPoint(commit).call()
     }
+  }
+
+  def gitPushChanges(
+               remote: String,
+               localDir: String,
+               branch: String): Unit = {
+
+    println(s"Pushing changes in $localDir to $remote branch $branch")
+
+    withRepository(localDir) { repository =>
+      val localGit: Git = new Git(repository)
+      localGit.add.addFilepattern(".").call()
+      //val result = localGit.push().
+      val status = localGit.status.call()
+      if (!status.getAdded.isEmpty) {
+        localGit.commit.setAll(true).setMessage("Added records").call()
+      }
+      println(s"Pushing records to $remote [$branch]")
+      val pushes = localGit.push.setRemote("origin").setRefSpecs(new RefSpec(s"$branch:$branch")).call()
+      for {
+        push <- iterableAsScalaIterable(pushes)
+        remoteUpdate <- iterableAsScalaIterable(push.getRemoteUpdates)
+      } {
+        println(s"Pushed ${remoteUpdate.getSrcRef}: ${remoteUpdate.getStatus} ${remoteUpdate.getNewObjectId.name}")
+      }
+    }
+
   }
 
   case class LogEntry(id: String, parentCount: Int, shortMessage: String)

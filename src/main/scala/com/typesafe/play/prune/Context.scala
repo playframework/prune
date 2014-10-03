@@ -73,6 +73,7 @@ case class Context(
 case class Args(
   configFile: Option[String] = None,
   dbFetch: Boolean = true,
+  dbPush: Boolean = false,
   playFetch: Boolean = true,
   appsFetch: Boolean = true,
   maxTestRuns: Option[Int] = None,

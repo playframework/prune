@@ -38,7 +38,7 @@ object Records {
   }
 
   def foldLeftAll[T,A](dir: Path, x0: A)(f: (A, UUID, T) => A)(implicit ctx: Context, reads: Reads[T]): A = {
-    val files = collectionAsScalaIterable(FileUtils.listFiles(dir.toFile, Array("json"), true))
+    val files = if (Files.exists(dir)) collectionAsScalaIterable(FileUtils.listFiles(dir.toFile, Array("json"), true)) else Seq.empty
     files.foldLeft(x0) {
       case (x, file) =>
         val p = file.toPath
