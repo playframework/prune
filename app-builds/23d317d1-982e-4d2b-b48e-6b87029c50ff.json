@@ -1,0 +1,33 @@
+{
+  "playBuildId" : "df357617-d819-45ec-9e64-06e82c0a37ff",
+  "appName" : "scala-bench",
+  "appsCommit" : "c8cea90387508e0123914c47fe38896ae0ec034d",
+  "javaVersionExecution" : {
+    "command" : {
+      "program" : "<java8.home>/bin/java",
+      "args" : [ "-version" ],
+      "workingDir" : "<prune.home>",
+      "env" : { }
+    },
+    "startTime" : 1412301802938,
+    "endTime" : 1412301803031,
+    "stdout" : "",
+    "stderr" : "java version \"1.8.0_05\"\nJava(TM) SE Runtime Environment (build 1.8.0_05-b13)\nJava HotSpot(TM) 64-Bit Server VM (build 25.5-b02, mixed mode)\n",
+    "returnCode" : 0
+  },
+  "buildExecutions" : [ {
+    "command" : {
+      "program" : "sbt",
+      "args" : [ "-Dsbt.ivy.home=<ivy.home>", "stage" ],
+      "workingDir" : "<tests.home>/scala-bench",
+      "env" : {
+        "JAVA_HOME" : "<java8.home>"
+      }
+    },
+    "startTime" : 1412301803174,
+    "endTime" : 1412301846028,
+    "stdout" : null,
+    "stderr" : null,
+    "returnCode" : 0
+  } ]
+}
