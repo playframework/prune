@@ -120,7 +120,7 @@ object Prune {
       def fetch(desc: String, switch: Boolean, remote: String, branches: Seq[String], checkedOutBranch: Option[String], localDir: String): Unit = {
         if (switch) {
           println(s"Fetching $desc from remote")
-          PruneGit.gitSync(
+          PruneGit.gitCloneOrRebaseBranches(
             remote = remote,
             branches = branches,
             checkedOutBranch = checkedOutBranch,
@@ -144,11 +144,12 @@ object Prune {
       val playCommits = playCommitsToTest(playTest)
       playCommits.flatMap { playCommit =>
         playTest.testNames.map { testName =>
+          val testApp = ctx.testConfig.get(testName).map(_.app).getOrElse(sys.error(s"No test config for $testName"))
           TestTask(
             info = TestTaskInfo(
               testName = testName,
               playCommit = playCommit,
-              appName = "scala-bench"
+              appName = testApp
             ),
             playBranch = playTest.playBranch,
             appsBranch = playTest.appsBranch,

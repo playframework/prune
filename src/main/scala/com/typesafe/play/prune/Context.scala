@@ -61,7 +61,9 @@ case class Context(
   val testConfig: Map[String, TestConfig] = {
     asScalaBuffer(config.getConfigList("tests")).foldLeft[Map[String, TestConfig]](Map.empty) {
       case (m, entry) =>
-        m.updated(entry.getString("name"), TestConfig(
+        val name: String = entry.getString("name")
+        assert(!m.contains(name))
+        m.updated(name, TestConfig(
         app = entry.getString("app"),
         description = entry.getString("description"),
         wrkArgs = asScalaBuffer(entry.getStringList("wrkArgs"))

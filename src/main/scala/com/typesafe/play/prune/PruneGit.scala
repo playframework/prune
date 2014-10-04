@@ -3,17 +3,12 @@
  */
 package com.typesafe.play.prune
 
-import java.io._
 import java.nio.file._
 import java.util.{ List => JList }
-import java.util.concurrent.TimeUnit
-import org.apache.commons.io.{ FileUtils, IOUtils }
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib._
-import org.eclipse.jgit.revwalk._
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.transport.{RemoteConfig, RefSpec}
-import scala.collection.JavaConversions
 import scala.collection.convert.WrapAsJava._
 import scala.collection.convert.WrapAsScala._
 
@@ -41,14 +36,15 @@ object PruneGit {
     new RefSpec(s"refs/heads/$branch:refs/remotes/origin/$branch")
   }
 
-  def gitSync(
+  def gitCloneOrRebaseBranches(
     remote: String,
     localDir: String,
     branches: Seq[String],
     checkedOutBranch: Option[String]): Unit = {
 
     val branchesString = branches.mkString("[", ", ", "]")
-    val desc = s"$remote $branchesString into $localDir"
+    val branch: String = checkedOutBranch.getOrElse(branches.head)
+    val desc = s"$remote $branchesString into $localDir and checking out $branch"
 
     val localDirPath = Paths.get(localDir)
     if (Files.notExists(localDirPath)) {
@@ -57,21 +53,24 @@ object PruneGit {
       Git.cloneRepository
         .setURI(remote)
         .setBranchesToClone(seqAsJavaList(branches))
-        .setBranch(checkedOutBranch.getOrElse(branches.head))
+        .setBranch(branch)
         .setDirectory(localDirPath.toFile).call()
       println("Clone done.")
     } else {
-      println(s"Fetching $desc...")
+      println(s"Pulling $desc...")
       withRepository(localDir) { repository =>
         validateRemoteOrigin(repository, remote)
         val refSpecs = branches.map(refSpec)
-        new Git(repository)
-          .fetch()
-          .setRemote("origin")
-          .setRefSpecs(refSpecs: _*)
-          .call()
+        val git: Git = new Git(repository)
+        git.fetch().setRemote("origin").setRefSpecs(refSpecs: _*).call()
+        val branchOperationOrder = branches.filter(_ != branch) :+ branch // Reorder so `branch` is checked out last
+        for (b <- branchOperationOrder) {
+          git.checkout().setName(b).call()
+          val result = git.rebase().setUpstream(s"refs/remotes/origin/$branch").call()
+          println(result.getStatus)
+        }
       }
-      println("Fetch done")
+      println("Pull done")
     }
 
   }
