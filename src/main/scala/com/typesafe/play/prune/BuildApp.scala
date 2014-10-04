@@ -68,7 +68,7 @@ object BuildApp {
       val newAppBuildId = UUID.randomUUID()
       println(s"Starting build for app $appName $newAppBuildId: "+(reasonsToBuild.mkString(", ")))
 
-      gitRebaseAndCheckout(
+      gitCheckout(
         localDir = ctx.appsHome,
         branch = appsBranch,
         commit = appsCommit)

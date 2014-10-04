@@ -58,7 +58,7 @@ object BuildPlay {
       val newPlayBuildId = UUID.randomUUID()
       println(s"Starting new Play build $newPlayBuildId: "+(reasonsToBuild.mkString(", ")))
 
-      gitRebaseAndCheckout(
+      gitCheckout(
         localDir = ctx.playHome,
         branch = playBranch,
         commit = playCommit)
