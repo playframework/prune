@@ -1,3 +1,6 @@
+import com.typesafe.sbt.SbtNativePackager._
+import NativePackagerKeys._
+
 name := "prune"
 
 version := "1.0"
@@ -17,3 +20,5 @@ libraryDependencies ++= Seq(
 )
 
 scalacOptions ++= Seq("-feature")
+
+packageArchetype.java_application
