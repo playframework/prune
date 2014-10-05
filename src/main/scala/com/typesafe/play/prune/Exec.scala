@@ -141,7 +141,7 @@ object Exec {
         startTime = startTime,
         endTime = endTime
       )
-      if (errorOnNonZeroExit && execution.returnCode != 0) {
+      if (errorOnNonZeroExit && execution.returnCode.fold(false)(_ != 0)) {
         sys.error(s"Execution failed: $execution")
       } else execution
     }
