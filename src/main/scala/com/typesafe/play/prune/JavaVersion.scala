@@ -33,7 +33,9 @@ object JavaVersion {
         workingDir = "<prune.home>",
         env = Map()
       ),
-      Capture
+      streamHandling = Capture,
+      errorOnNonZeroExit = false,
+      timeout = Some(60000)
     )
   }
 

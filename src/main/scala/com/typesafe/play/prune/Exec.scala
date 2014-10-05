@@ -91,6 +91,7 @@ object Exec {
   def run(
     command: Command,
     streamHandling: StreamHandling,
+    errorOnNonZeroExit: Boolean = true,
     timeout: Option[Long] = None)(implicit ctx: Context): Execution = {
     val prepared = prepare(command, streamHandling, timeout)
     import prepared._
@@ -103,7 +104,7 @@ object Exec {
     val endTime = DateTime.now
     val streamResult = streamResultGetter()
 
-    Execution(
+    val execution = Execution(
       command = command,
       stdout = streamResult.map(_._1),
       stderr = streamResult.map(_._2),
@@ -111,11 +112,15 @@ object Exec {
       startTime = startTime,
       endTime = endTime
     )
+    if (errorOnNonZeroExit && execution.returnCode.fold(false)(_ != 0)) {
+      sys.error(s"Execution failed: $execution")
+    } else execution
   }
 
   def runAsync(
     command: Command,
     streamHandling: StreamHandling,
+    errorOnNonZeroExit: Boolean = true,
     timeout: Option[Long] = None)(implicit ctx: Context): () => Execution = {
     val prepared = prepare(command, streamHandling, timeout)
     import prepared._
@@ -128,7 +133,7 @@ object Exec {
       val endTime = DateTime.now
       val returnCode = if (resultHandler.hasResult) resultHandler.getExitValue else resultHandler.getException.getExitValue
       val streamResult = streamResultGetter()
-      Execution(
+      val execution = Execution(
         command = command,
         stdout = streamResult.map(_._1),
         stderr = streamResult.map(_._2),
@@ -136,6 +141,9 @@ object Exec {
         startTime = startTime,
         endTime = endTime
       )
+      if (errorOnNonZeroExit && execution.returnCode != 0) {
+        sys.error(s"Execution failed: $execution")
+      } else execution
     }
   }
 

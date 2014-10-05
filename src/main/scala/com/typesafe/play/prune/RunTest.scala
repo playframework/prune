@@ -53,7 +53,8 @@ object RunTest {
           "JAVA_OPTS" -> ctx.config.getString("java8.opts")
         )
       ),
-      Capture
+      Capture,
+      errorOnNonZeroExit = false // Because we'll get an error when we kill the process
       //timeout = Option(20000) // TODO: Timeout
     )
     var terminated = false // Mark termination so we can terminate in finally clause if there's an error
