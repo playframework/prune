@@ -224,7 +224,7 @@ object Prune {
           val wrkOutput: Option[String] = resultMap.get(playCommit).flatMap(_.wrkOutput)
           val wrkResult: Option[WrkResult] = wrkOutput.flatMap(Results.parseWrkOutput)
           val resultDisplay: String = wrkResult.map { wr =>
-            s"Requests/s: ${wr.requestsPerSecond.mean}, "+
+            s"Requests/s: ${wr.requests.toDouble / wr.duration.toDouble * 1000000}, "+
             s"Latency 50%: ${wr.latency.percentiles(50)}, " +
             s"Latency 95%: ${wr.latency.percentiles(95)}"
           }.getOrElse("-")
