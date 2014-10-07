@@ -10,11 +10,10 @@ import org.joda.time.DateTime
 
 import scala.collection.convert.WrapAsScala._
 
-/**
- * Created by rich on 7/10/14.
- */
 object JsonReport {
   def generateJsonReport(implicit ctx: Context): Unit = {
+    val outputFile: String = ctx.args.outputFile.getOrElse(sys.error("Please provide an output file"))
+
     // Use HOURS because MILLISECONDS can overflow DateTime.minusMillis()
     val hours = ctx.config.getDuration("jsonReport.duration", TimeUnit.HOURS)
     val now: DateTime = DateTime.now
@@ -107,7 +106,7 @@ object JsonReport {
     }
     val json = writesOutput.writes(output)
     val jsonString = Json.stringify(json)
-    Files.write(Paths.get(ctx.args.outputFile.get), jsonString.getBytes("UTF-8"))
+    Files.write(Paths.get(outputFile), jsonString.getBytes("UTF-8"))
   }
 
 }

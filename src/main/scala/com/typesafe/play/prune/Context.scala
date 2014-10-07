@@ -124,9 +124,6 @@ object Args {
       } text("Generate a report of test results to a JSON file") children(
         arg[String]("<output-file>") action { (s, c) =>
           c.copy(outputFile = Some(s))
-        },
-        checkConfig { c =>
-          if (!c.outputFile.isDefined) failure("Please provide an output file") else success
         }
       )
     }
