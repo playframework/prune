@@ -32,25 +32,23 @@ object Records {
   }
 
   def readAll[T](dir: Path)(implicit ctx: Context, reads: Reads[T]): Map[UUID,T] = {
-    foldLeftAll[T, Map[UUID,T]](dir, Map.empty) {
-      case (m, id, record) => m.updated(id, record)
-    }
+    iteratorAll(dir).toMap
   }
 
-  def foldLeftAll[T,A](dir: Path, x0: A)(f: (A, UUID, T) => A)(implicit ctx: Context, reads: Reads[T]): A = {
+  def iteratorAll[T](dir: Path)(implicit ctx: Context, reads: Reads[T]): Iterator[(UUID, T)] = {
     val files = if (Files.exists(dir)) collectionAsScalaIterable(FileUtils.listFiles(dir.toFile, Array("json"), true)) else Seq.empty
-    files.foldLeft(x0) {
-      case (x, file) =>
-        val p = file.toPath
-        val id: UUID = {
-          val fileName = p.getFileName.toString
-          val dotIndex = fileName.lastIndexOf('.')
-          assert(dotIndex != -1)
-          val baseFileName = fileName.substring(0, dotIndex)
-          UUID.fromString(baseFileName)
-        }
-        val record: T = Records.readFile[T](p).getOrElse(sys.error(s"Expected record at $p"))
-        f(x, id, record)
+    val filesIterator = files.iterator
+    filesIterator.map { file =>
+      val p = file.toPath
+      val id: UUID = {
+        val fileName = p.getFileName.toString
+        val dotIndex = fileName.lastIndexOf('.')
+        assert(dotIndex != -1)
+        val baseFileName = fileName.substring(0, dotIndex)
+        UUID.fromString(baseFileName)
+      }
+      val record: T = Records.readFile[T](p).getOrElse(sys.error(s"Expected record at $p"))
+      (id, record)
     }
   }
 
@@ -353,10 +351,10 @@ object DB {
     testRunId: UUID,
     testRunRecord: TestRunRecord
   )
-  def foldLeft[A](x0: A)(f: (A, Join) => A)(implicit ctx: Context): A = {
+  def iterator(implicit ctx: Context): Iterator[Join] = {
     val testRunsDir = Paths.get(ctx.dbHome, "test-runs")
-    Records.foldLeftAll[TestRunRecord, A](testRunsDir, x0) {
-      case (x, testRunId, testRunRecord) =>
+    Records.iteratorAll[TestRunRecord](testRunsDir).flatMap {
+      case (testRunId, testRunRecord) =>
         val appBuildId = testRunRecord.appBuildId
         val optJoin: Option[Join] = for {
           appBuildRecord <- AppBuildRecord.read(appBuildId)
@@ -372,7 +370,7 @@ object DB {
           testRunId,
           testRunRecord
         )
-        optJoin.fold(x)(join => f(x, join))
+        optJoin.iterator
     }
   }
 

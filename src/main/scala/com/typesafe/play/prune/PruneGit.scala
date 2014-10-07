@@ -9,6 +9,7 @@ import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib._
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.transport.{RemoteConfig, RefSpec}
+import org.joda.time.{ReadableInstant, DateTime}
 import scala.collection.convert.WrapAsJava._
 import scala.collection.convert.WrapAsScala._
 
@@ -148,13 +149,48 @@ object PruneGit {
           val commit = iterator.next()
           val current = commit.getId
           if (current == next) {
+            // Stop walking because we've gone back before the end time
             walkBackwards(results :+ next.name, commit.getParent(0).getId)
           } else {
+            // Skip this commit because its not the next commit that we're scanning for
             walkBackwards(results, next)
           }
         } else results
       }
       walkBackwards(Seq.empty, endId)
+    }
+  }
+  def gitFirstParentsLogToDate(localDir: String, branch: String, lastRev: String, endTime: ReadableInstant): Seq[(String, DateTime)] = {
+    withRepository(localDir) { repository =>
+      val lastId: AnyObjectId = resolveId(localDir, branch, lastRev)
+      val endTimeSeconds: Int = (endTime.getMillis / 1000).toInt
+      // println(s"Logging from $startId to $endId")
+
+      val logWalk = new Git(repository).log().add(lastId).call()
+      val iterator = logWalk.iterator()
+
+      @scala.annotation.tailrec
+      def walkBackwards(results: Seq[(String, DateTime)], next: AnyObjectId): Seq[(String, DateTime)] = {
+        if (iterator.hasNext) {
+          val commit = iterator.next()
+          val current = commit.getId
+          if (current == next) {
+            val commitTimeSeconds = commit.getCommitTime()
+            if (commitTimeSeconds < endTimeSeconds) {
+              // Stop walking because we've gone past the end time that we're interested in
+              results
+            } else {
+              val commitTime = new DateTime(commitTimeSeconds.toLong * 1000)
+              // Include this commit in our result and scan for its parent
+              walkBackwards(results :+ (next.name, commitTime), commit.getParent(0).getId)
+            }
+          } else {
+            // Skip this commit because its not the next commit that we're scanning for
+            walkBackwards(results, next)
+          }
+        } else results
+      }
+      walkBackwards(Seq.empty, lastId)
     }
   }
 

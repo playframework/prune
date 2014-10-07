@@ -81,7 +81,8 @@ case class Args(
   playFetch: Boolean = true,
   appsFetch: Boolean = true,
   maxTestRuns: Option[Int] = None,
-  maxWrkDuration: Option[Int] = None)
+  maxWrkDuration: Option[Int] = None,
+  outputFile: Option[String] = None)
 object Args {
   def parse(rawArgs: Seq[String]) = {
     val parser = new scopt.OptionParser[Args]("prune") {
@@ -120,7 +121,14 @@ object Args {
       } text("Output a simple report of test results")
       cmd("generate-json-report") action { (_, c) =>
         c.copy(command = Some(GenerateJsonReport))
-      } text("Generate a report of test results to a JSON file")
+      } text("Generate a report of test results to a JSON file") children(
+        arg[String]("<output-file>") action { (s, c) =>
+          c.copy(outputFile = Some(s))
+        },
+        checkConfig { c =>
+          if (!c.outputFile.isDefined) failure("Please provide an output file") else success
+        }
+      )
     }
     parser.parse(rawArgs, Args()).getOrElse(sys.error("Arg parse error"))
   }

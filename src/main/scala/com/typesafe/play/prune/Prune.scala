@@ -5,7 +5,7 @@ package com.typesafe.play.prune
 
 import com.typesafe.config.{ Config, ConfigFactory }
 import java.nio.file._
-import java.util.{ List => JList, Map => JMap, UUID }
+import java.util.UUID
 import org.apache.commons.io.{ FileUtils, IOUtils }
 import org.eclipse.jgit.lib._
 
@@ -75,7 +75,7 @@ object Prune {
       case Some(Test) => test
       case Some(PushTestResults) => pushTestResults
       case Some(PrintReport) => printReport
-      case Some(GenerateJsonReport) => ???
+      case Some(GenerateJsonReport) => JsonReport.generateJsonReport
     }
 
   }
@@ -130,17 +130,13 @@ object Prune {
     }
     val neededPlayCommitCount: Int = neededTasks.map(_.info.playCommit).distinct.size
 
-    val completedTaskInfos: Seq[TestTaskInfo] = {
-      DB.foldLeft[Seq[TestTaskInfo]](Seq.empty) {
-        case (infos, join) =>
-          val info = TestTaskInfo(
+    val completedTaskInfos: Seq[TestTaskInfo] = DB.iterator.map { join =>
+          TestTaskInfo(
             testName = join.testRunRecord.testName,
             playCommit = join.playBuildRecord.playCommit,
             appName = join.appBuildRecord.appName
           )
-          infos :+ info
-      }
-    }
+    }.toSeq
     val completedPlayCommitCount: Int = completedTaskInfos.map(_.playCommit).distinct.size
 
     val tasksToRun: Seq[TestTask] = neededTasks.filter(task => !completedTaskInfos.contains(task.info))
@@ -170,18 +166,17 @@ object Prune {
                            )
 
     def getResults(playCommits: Seq[PlayRev], testName: String): Map[PlayRev, TestResult] = {
-      DB.foldLeft[Map[PlayRev,TestResult]](Map.empty) {
-        case (results, join) =>
-          if (
-            join.pruneInstanceId == ctx.pruneInstanceId &&
-              join.testRunRecord.testName == testName &&
-              playCommits.contains(join.playBuildRecord.playCommit)) {
-            results.updated(join.playBuildRecord.playCommit, TestResult(
-              testRunId = join.testRunId,
-              wrkOutput = join.testRunRecord.wrkExecutions.last.stdout
-            ))
-          } else results
-      }
+      DB.iterator.flatMap { join =>
+        if (
+          join.pruneInstanceId == ctx.pruneInstanceId &&
+            join.testRunRecord.testName == testName &&
+            playCommits.contains(join.playBuildRecord.playCommit)) {
+          Iterator((join.playBuildRecord.playCommit, TestResult(
+            testRunId = join.testRunId,
+            wrkOutput = join.testRunRecord.wrkExecutions.last.stdout
+          )))
+        } else Iterator.empty
+      }.toMap
     }
 
     for {
@@ -202,10 +197,6 @@ object Prune {
         println(s"${playCommit.substring(0,7)} $resultDisplay")
       }
     }
-  }
-
-  def generateJsonReport(implicit ctx: Context): Unit = {
-    ???
   }
 
   def pushTestResults(implicit ctx: Context): Unit = {
