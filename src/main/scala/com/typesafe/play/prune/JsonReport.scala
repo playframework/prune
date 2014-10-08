@@ -4,6 +4,7 @@
 package com.typesafe.play.prune
 
 import java.nio.file.{Paths, Files}
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import org.joda.time.DateTime
@@ -16,9 +17,9 @@ object JsonReport {
 
     // Use HOURS because MILLISECONDS can overflow DateTime.minusMillis()
     val hours = ctx.config.getDuration("jsonReport.duration", TimeUnit.HOURS)
-    val now: DateTime = DateTime.now
-    val earliestTime = now.minusHours(hours.toInt)
-    println(s"Generating report from $earliestTime until $now")
+    val endTime: DateTime = DateTime.now
+    val startTime = endTime.minusHours(hours.toInt)
+    println(s"Generating report from $startTime until $endTime")
 
     type BranchName = String
     type Commit = String
@@ -28,21 +29,24 @@ object JsonReport {
                            )
     type TestName = String
     case class TestResult(
-                           requestsPerSecond: Double,
-                           latencyMean: Double,
-                           latency95: Double
-                           )
+      testRunId: UUID,
+      requestsPerSecond: Double,
+      latencyMean: Double,
+      latency95: Double
+    )
     type TestDescription = String
     case class Output(
-                       branches: Map[BranchName,Seq[CommitInfo]],
-                       tests: Map[TestName,TestDescription],
-                       results: Map[Commit,Map[TestName,TestResult]]
-                       )
+      start: DateTime,
+      end: DateTime,
+      branches: Map[BranchName,Seq[CommitInfo]],
+      tests: Map[TestName,TestDescription],
+      results: Map[Commit,Map[TestName,TestResult]]
+    )
 
     val branches: Map[BranchName, Seq[CommitInfo]] = {
       val branchNames: Seq[BranchName] = asScalaBuffer(ctx.config.getStringList("jsonReport.playBranches"))
       branchNames.map { branch =>
-        val commits: Seq[(Commit, DateTime)] = PruneGit.gitFirstParentsLogToDate(ctx.playHome, branch, "HEAD", earliestTime)
+        val commits: Seq[(Commit, DateTime)] = PruneGit.gitFirstParentsLogToDate(ctx.playHome, branch, "HEAD", startTime)
         val commitInfos: Seq[CommitInfo] = commits.map { case (commit, time) => CommitInfo(commit, time) }
         (branch, commitInfos)
       }.toMap
@@ -60,6 +64,7 @@ object JsonReport {
           val optWrkResult: Option[WrkResult] = join.testRunRecord.wrkExecutions.last.stdout.flatMap(Results.parseWrkOutput)
           optWrkResult.fold[Iterator[(Commit,TestName,TestResult)]](Iterator.empty) { wr =>
             val testResult = TestResult(
+              testRunId = join.testRunId,
               requestsPerSecond = wr.requests.toDouble / wr.duration.toDouble * 1000000,
               latencyMean = wr.latency.mean / 1000,
               latency95 = wr.latency.percentiles(95).toDouble / 1000
@@ -77,6 +82,8 @@ object JsonReport {
     }
 
     val output = Output(
+      start = startTime,
+      end = endTime,
       branches = branches,
       tests = tests,
       results = results
@@ -86,6 +93,7 @@ object JsonReport {
 
     implicit val writesTestResult = new Writes[TestResult] {
       def writes(tr: TestResult) = Json.obj(
+        "run" -> tr.testRunId,
         "req/s" -> tr.requestsPerSecond,
         "latMean" -> tr.latencyMean,
         "lat95" -> tr.latency95
@@ -99,6 +107,8 @@ object JsonReport {
     }
     implicit val writesOutput = new Writes[Output] {
       def writes(o: Output) = Json.obj(
+        "start" -> o.start,
+        "end" -> o.end,
         "branches" -> o.branches,
         "tests" -> o.tests,
         "results" -> o.results

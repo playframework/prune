@@ -176,13 +176,14 @@ object PruneGit {
           val current = commit.getId
           if (current == next) {
             val commitTimeSeconds = commit.getCommitTime()
+            val commitTime = new DateTime(commitTimeSeconds.toLong * 1000)
+            val newResults: Seq[(String, DateTime)] = results :+(next.name, commitTime)
             if (commitTimeSeconds < endTimeSeconds) {
               // Stop walking because we've gone past the end time that we're interested in
-              results
+              newResults
             } else {
-              val commitTime = new DateTime(commitTimeSeconds.toLong * 1000)
               // Include this commit in our result and scan for its parent
-              walkBackwards(results :+ (next.name, commitTime), commit.getParent(0).getId)
+              walkBackwards(newResults, commit.getParent(0).getId)
             }
           } else {
             // Skip this commit because its not the next commit that we're scanning for
