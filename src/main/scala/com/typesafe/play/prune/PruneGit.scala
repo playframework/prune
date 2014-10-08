@@ -44,8 +44,8 @@ object PruneGit {
     checkedOutBranch: Option[String]): Unit = {
 
     val branchesString = branches.mkString("[", ", ", "]")
-    val branch: String = checkedOutBranch.getOrElse(branches.head)
-    val desc = s"$remote $branchesString into $localDir and checking out $branch"
+    val branchToCheckout: String = checkedOutBranch.getOrElse(branches.head)
+    val desc = s"$remote $branchesString into $localDir and checking out $branchToCheckout"
 
     val localDirPath = Paths.get(localDir)
     if (Files.notExists(localDirPath)) {
@@ -54,21 +54,31 @@ object PruneGit {
       Git.cloneRepository
         .setURI(remote)
         .setBranchesToClone(seqAsJavaList(branches))
-        .setBranch(branch)
+        .setBranch(branchToCheckout)
         .setDirectory(localDirPath.toFile).call()
       println("Clone done.")
     } else {
       println(s"Pulling $desc...")
       withRepository(localDir) { repository =>
         validateRemoteOrigin(repository, remote)
-        val refSpecs = branches.map(refSpec)
         val git: Git = new Git(repository)
-        git.fetch().setRemote("origin").setRefSpecs(refSpecs: _*).call()
-        val branchOperationOrder = branches.filter(_ != branch) :+ branch // Reorder so `branch` is checked out last
+
+        {
+          val existingBranches = asScalaBuffer(git.branchList.call()).map(_.getName.split('/').last)
+          val missingBranches = branches diff existingBranches
+          for (b <- missingBranches) {
+            git.branchCreate.setName(b).setStartPoint(s"refs/remotes/origin/$b").call()
+          }
+        }
+        {
+          val refSpecs = branches.map(refSpec)
+          git.fetch().setRemote("origin").setRefSpecs(refSpecs: _*).call()
+        }
+        val branchOperationOrder = branches.filter(_ != branchToCheckout) :+ branchToCheckout // Reorder so `branch` is checked out last
         for (b <- branchOperationOrder) {
           git.checkout().setName(b).call()
-          val result = git.rebase().setUpstream(s"refs/remotes/origin/$branch").call()
-          println(result.getStatus)
+          val result = git.rebase().setUpstream(s"refs/remotes/origin/$b").call()
+          println(s"Branch $b: ${result.getStatus}")
         }
       }
       println("Pull done")
