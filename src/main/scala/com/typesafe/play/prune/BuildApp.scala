@@ -3,21 +3,9 @@
  */
 package com.typesafe.play.prune
 
-import java.io._
 import java.nio.file._
-import java.util.{ List => JList, Map => JMap, UUID }
-import java.util.concurrent.TimeUnit
-import org.apache.commons.io.{ FileUtils, IOUtils }
-import org.apache.commons.exec._
-import org.eclipse.jgit.api.Git
-import org.eclipse.jgit.lib._
-import org.eclipse.jgit.revwalk._
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder
-import org.joda.time._
-import scala.collection.JavaConversions
-import scala.concurrent._
-import scala.concurrent.duration.Duration
-import scala.concurrent.ExecutionContext.Implicits.global
+import java.util.UUID
+import org.apache.commons.io.FileUtils
 
 import Exec._
 import PruneGit._
@@ -38,7 +26,8 @@ object BuildApp {
         Seq("-Dsbt.ivy.home=<ivy.home>", "stage"),
         workingDir = s"<tests.home>/$appName",
         env = Map(
-          "JAVA_HOME" -> "<java8.home>"
+          "JAVA_HOME" -> "<java8.home>",
+          "LANG" -> "en_US.UTF-8"
         )
       )
     )

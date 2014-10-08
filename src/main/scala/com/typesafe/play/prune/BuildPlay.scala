@@ -30,7 +30,8 @@ object BuildPlay {
         program = "./build",
         args = Seq("-Dsbt.ivy.home=<ivy.home>", "publish-local"),
         env = Map(
-          "JAVA_HOME" -> "<java8.home>"
+          "JAVA_HOME" -> "<java8.home>",
+          "LANG" -> "en_US.UTF-8"
         ),
         workingDir = "<play.home>/framework"
       )

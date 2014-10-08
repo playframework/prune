@@ -29,7 +29,7 @@ object PruneGit {
   def resolveId(localDir: String, branch: String, rev: String): AnyObjectId = {
     withRepository(localDir) { repository =>
       val fixedRev = if (rev == "HEAD") s"refs/heads/$branch" else rev
-      Option(repository.resolve(fixedRev)).getOrElse(sys.error(s"Couldn't resolve revision $rev on branch $branch in repo $localDir"))
+      Option(repository.resolve(fixedRev)).getOrElse(sys.error(s"Couldn't resolve revision $rev ($fixedRev) on branch $branch in repo $localDir"))
     }
   }
 
