@@ -8,6 +8,8 @@ import java.nio.file._
 import java.util.UUID
 import org.apache.commons.io.{ FileUtils, IOUtils }
 import org.eclipse.jgit.lib._
+import org.joda.time.{Duration, DateTime}
+import scala.annotation.tailrec
 
 case class TestTask(
   info: TestTaskInfo,
@@ -106,6 +108,10 @@ object Prune {
       playTestConfig.playRevisionRange._2)
 
   def test(implicit ctx: Context): Unit = {
+    
+    val deadline: Option[DateTime] = ctx.args.maxTotalMinutes.map { mins =>
+      DateTime.now.plusMinutes(mins)
+    }
 
     val neededTasks: Seq[TestTask] = ctx.playTests.flatMap { playTest =>
       //println(s"Working out tests to run for $playTest")
@@ -155,7 +161,21 @@ object Prune {
 
     Assets.extractAssets
 
-    truncatedTasksToRun.foreach(RunTest.runTestTask)
+    @tailrec
+    def loop(taskQueue: Seq[TestTask]): Unit = {
+      val now = DateTime.now
+      deadline match {
+        case Some(d) if now.isAfter(d) =>
+          val targetMins: Int = ctx.args.maxTotalMinutes.get
+          val actualMins: Int = new Duration(d, now).getStandardMinutes.toInt
+          println(s"Stopping tests after ${actualMins} minutes because --max-total-minutes ${targetMins} exceeded: ${taskQueue.size} tests remaining")
+        case _ =>
+          RunTest.runTestTask(taskQueue.head)
+          loop(taskQueue.tail)
+      }
+      
+    }
+    loop(truncatedTasksToRun)
   }
 
   def printReport(implicit ctx: Context): Unit = {

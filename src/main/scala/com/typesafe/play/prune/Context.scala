@@ -82,6 +82,7 @@ case class Args(
   appsFetch: Boolean = true,
   maxTestRuns: Option[Int] = None,
   maxWrkDuration: Option[Int] = None,
+  maxTotalMinutes: Option[Int] = None,
   outputFile: Option[String] = None)
 object Args {
   def parse(rawArgs: Seq[String]) = {
@@ -111,6 +112,9 @@ object Args {
         },
         opt[Int]("max-wrk-duration") action { (i, c) =>
           c.copy(maxWrkDuration = Some(i))
+        },
+        opt[Int]("max-total-minutes") action { (i, c) =>
+          c.copy(maxTotalMinutes = Some(i))
         }
       )
       cmd("push-test-results") action { (_, c) =>
