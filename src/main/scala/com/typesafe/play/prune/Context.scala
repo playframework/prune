@@ -26,6 +26,10 @@ case class Context(
   val dbBranch = config.getString("dbBranch")
   val dbHome = config.getString("dbHome")
 
+  val siteRemote = config.getString("siteRemote")
+  val siteBranch = config.getString("siteBranch")
+  val siteHome = config.getString("siteHome")
+
   val assetsHome = config.getString("assetsHome")
 
   val playTests: Seq[PlayTestsConfig] = {
@@ -73,6 +77,9 @@ case object Test extends CommandArg
 case object PushTestResults extends CommandArg
 case object PrintReport extends CommandArg
 case object GenerateJsonReport extends CommandArg
+case object PullSite extends CommandArg
+case object GenerateSiteFiles extends CommandArg
+case object PushSite extends CommandArg
 
 case class Args(
   command: Option[CommandArg] = None,
@@ -130,6 +137,15 @@ object Args {
           c.copy(outputFile = Some(s))
         }
       )
+      cmd("pull-site") action { (_, c) =>
+        c.copy(command = Some(PullSite))
+      } text("Pull site from remote repository")
+      cmd("generate-site-files") action { (_, c) =>
+        c.copy(command = Some(GenerateSiteFiles))
+      } text("Generate site files based on test results")
+      cmd("push-site") action { (_, c) =>
+        c.copy(command = Some(PushSite))
+      } text("Push site to remote repository")
     }
     parser.parse(rawArgs, Args()).getOrElse(sys.error("Arg parse error"))
   }

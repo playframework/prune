@@ -12,9 +12,7 @@ import org.joda.time.DateTime
 import scala.collection.convert.WrapAsScala._
 
 object JsonReport {
-  def generateJsonReport(implicit ctx: Context): Unit = {
-    val outputFile: String = ctx.args.outputFile.getOrElse(sys.error("Please provide an output file"))
-
+  def generateJsonReport(implicit ctx: Context): String = {
     // Use HOURS because MILLISECONDS can overflow DateTime.minusMillis()
     val hours = ctx.config.getDuration("jsonReport.duration", TimeUnit.HOURS)
     val endTime: DateTime = DateTime.now
@@ -29,40 +27,40 @@ object JsonReport {
                            )
     type TestName = String
     case class TestResult(
-      testRunId: UUID,
-      requestsPerSecond: Double,
-      latencyMean: Double,
-      latency95: Double
-    )
+                           testRunId: UUID,
+                           requestsPerSecond: Double,
+                           latencyMean: Double,
+                           latency95: Double
+                           )
     type TestDescription = String
     case class Output(
-      start: DateTime,
-      end: DateTime,
-      branches: Map[BranchName,Seq[CommitInfo]],
-      tests: Map[TestName,TestDescription],
-      results: Map[Commit,Map[TestName,TestResult]]
-    )
+                       start: DateTime,
+                       end: DateTime,
+                       branches: Map[BranchName, Seq[CommitInfo]],
+                       tests: Map[TestName, TestDescription],
+                       results: Map[Commit, Map[TestName, TestResult]]
+                       )
 
     val branches: Map[BranchName, Seq[CommitInfo]] = {
       val branchNames: Seq[BranchName] = asScalaBuffer(ctx.config.getStringList("jsonReport.playBranches"))
       branchNames.map { branch =>
         val commits: Seq[(Commit, DateTime)] = PruneGit.gitFirstParentsLogToDate(ctx.playHome, branch, "HEAD", startTime)
-        val commitInfos: Seq[CommitInfo] = commits.map { case (commit, time) => CommitInfo(commit, time) }
+        val commitInfos: Seq[CommitInfo] = commits.map { case (commit, time) => CommitInfo(commit, time)}
         (branch, commitInfos)
       }.toMap
     }
 
-    val tests: Map[TestName,TestDescription] = ctx.testConfig.mapValues(_.description)
+    val tests: Map[TestName, TestDescription] = ctx.testConfig.mapValues(_.description)
 
-    val results: Map[Commit,Map[TestName,TestResult]] = {
+    val results: Map[Commit, Map[TestName, TestResult]] = {
       // Flatten commits into a set for fast lookup
       val commitSet: Set[Commit] =
         (for ((branch, commitInfos) <- branches; commitInfo <- commitInfos) yield commitInfo.commit).to[Set]
-      val flatCommitResults: Iterator[(Commit,TestName,TestResult)] = DB.iterator.flatMap { join =>
+      val flatCommitResults: Iterator[(Commit, TestName, TestResult)] = DB.iterator.flatMap { join =>
         if (join.pruneInstanceId == ctx.pruneInstanceId &&
           commitSet.contains(join.playBuildRecord.playCommit)) {
           val optWrkResult: Option[WrkResult] = join.testRunRecord.wrkExecutions.last.stdout.flatMap(Results.parseWrkOutput)
-          optWrkResult.fold[Iterator[(Commit,TestName,TestResult)]](Iterator.empty) { wr =>
+          optWrkResult.fold[Iterator[(Commit, TestName, TestResult)]](Iterator.empty) { wr =>
             val testResult = TestResult(
               testRunId = join.testRunId,
               requestsPerSecond = wr.requests.toDouble / wr.duration.toDouble * 1000000,
@@ -73,9 +71,9 @@ object JsonReport {
           }
         } else Iterator.empty
       }
-      flatCommitResults.foldLeft[Map[Commit,Map[TestName,TestResult]]](Map.empty) {
+      flatCommitResults.foldLeft[Map[Commit, Map[TestName, TestResult]]](Map.empty) {
         case (commitMap, (commit, testName, testResult)) =>
-          val testNameMap: Map[TestName,TestResult] = commitMap.getOrElse(commit, Map.empty)
+          val testNameMap: Map[TestName, TestResult] = commitMap.getOrElse(commit, Map.empty)
           if (testNameMap.contains(testName)) println(s"Overwriting existing test result for $commit $testName")
           commitMap + (commit -> (testNameMap + (testName -> testResult)))
       }
@@ -116,7 +114,7 @@ object JsonReport {
     }
     val json = writesOutput.writes(output)
     val jsonString = Json.stringify(json)
-    Files.write(Paths.get(outputFile), jsonString.getBytes("UTF-8"))
+    jsonString
   }
 
 }

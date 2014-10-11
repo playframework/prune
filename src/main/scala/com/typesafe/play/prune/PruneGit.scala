@@ -104,7 +104,8 @@ object PruneGit {
   def gitPushChanges(
                remote: String,
                localDir: String,
-               branch: String): Unit = {
+               branch: String,
+               commitMessage: String): Unit = {
 
     println(s"Pushing changes in $localDir to $remote branch $branch")
 
@@ -113,8 +114,8 @@ object PruneGit {
       localGit.add.addFilepattern(".").call()
       //val result = localGit.push().
       val status = localGit.status.call()
-      if (!status.getAdded.isEmpty) {
-        localGit.commit.setAll(true).setMessage("Added records").call()
+      if (!status.getChanged.isEmpty) {
+        localGit.commit.setAll(true).setMessage(commitMessage).call()
       }
       println(s"Pushing records to $remote [$branch]")
       val pushes = localGit.push.setRemote("origin").setRefSpecs(new RefSpec(s"$branch:$branch")).call()

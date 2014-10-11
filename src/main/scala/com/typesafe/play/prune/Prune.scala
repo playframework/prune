@@ -6,7 +6,6 @@ package com.typesafe.play.prune
 import com.typesafe.config.{ Config, ConfigFactory }
 import java.nio.file._
 import java.util.UUID
-import org.apache.commons.io.{ FileUtils, IOUtils }
 import org.eclipse.jgit.lib._
 import org.joda.time.{Duration, DateTime}
 import scala.annotation.tailrec
@@ -52,7 +51,13 @@ object Prune {
         |#dbRemote: "https://github.com/playframework/prune.git"
         |
         |# The branch of the database repository to use for database results
-        |#dbBranch: database""".stripMargin)
+        |#dbBranch: database
+        |
+        |# The location of the remote site repository (often the main Prune repository)
+        |#siteRemote: "https://github.com/playframework/prune.git"
+        |# The branch of the site repository to use for site content
+        |#siteBranch: gh-pages
+        |""".stripMargin)
       System.exit(1)
     }
     if (Files.notExists(userConfigFile)) configError("Please create a Prune configuration file.")
@@ -60,7 +65,7 @@ object Prune {
     val userConfig: Config = ConfigFactory.parseFile(userConfigFile.toFile)
     val config = userConfig.withFallback(defaultConfig)
 
-    Seq("pruneInstanceId", "java8.home", "dbRemote", "dbBranch").foreach { path =>
+    Seq("pruneInstanceId", "java8.home", "dbRemote", "dbBranch", "siteRemote", "siteBranch").foreach { path =>
       if (!config.hasPath(path)) configError(s"Missing setting `$path` from your Prune configuration file.")
     }
 
@@ -77,7 +82,10 @@ object Prune {
       case Some(Test) => test
       case Some(PushTestResults) => pushTestResults
       case Some(PrintReport) => printReport
-      case Some(GenerateJsonReport) => JsonReport.generateJsonReport
+      case Some(GenerateJsonReport) => generateJsonReport
+      case Some(PullSite) => pullSite
+      case Some(GenerateSiteFiles) => generateSiteFiles
+      case Some(PushSite) => pushSite
     }
 
   }
@@ -224,7 +232,37 @@ object Prune {
     PruneGit.gitPushChanges(
       remote = ctx.dbRemote,
       branch = ctx.dbBranch,
-      localDir = ctx.dbHome)
+      localDir = ctx.dbHome,
+      commitMessage = "Added records")
+  }
+
+  def generateJsonReport(implicit ctx: Context): Unit = {
+    val outputFile: String = ctx.args.outputFile.getOrElse(sys.error("Please provide an output file"))
+    val jsonString = JsonReport.generateJsonReport
+    Files.write(Paths.get(outputFile), jsonString.getBytes("UTF-8"))
+  }
+
+  def pullSite(implicit ctx: Context): Unit = {
+    PruneGit.gitCloneOrRebaseBranches(
+      remote = ctx.siteRemote,
+      branches = Seq(ctx.siteBranch),
+      checkedOutBranch = Some(ctx.siteBranch),
+      localDir = ctx.siteHome)
+  }
+
+  def generateSiteFiles(implicit ctx: Context): Unit = {
+    val jsonString = JsonReport.generateJsonReport
+    val jsString = s"var report = $jsonString;"
+    val outputFile: Path = Paths.get(ctx.siteHome, "prune-data.js")
+    Files.write(outputFile, jsString.getBytes("UTF-8"))
+  }
+
+  def pushSite(implicit ctx: Context): Unit = {
+    PruneGit.gitPushChanges(
+      remote = ctx.siteRemote,
+      branch = ctx.siteBranch,
+      localDir = ctx.siteHome,
+      commitMessage = "Updated generated files")
   }
 
 }
