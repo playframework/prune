@@ -35,29 +35,30 @@ object Prune {
       println(s"""
         |$message
         |
-        |Prune is looking for a configuration file at $userConfigFile. You can override
-        |the configuration file location with --config-file=<path>.
-        |
-        |An example configuration file with a random instance id is shown below:
-        |
-        |---- prune.config ----
         |# The UUID used to identify this instance of Prune in test records.
-        |pruneInstanceId: ${UUID.randomUUID()}
+        |# Each Prune instance needs a unique id. To generate a unique id, go
+        |# to http://www.famkruithof.net/uuid/uuidgen.
+        |#pruneInstanceId: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
         |
-        |# The location of Java 8 on the system.
+        |# The location of Java 8 on the system. Prune will use this JDK when
+        |# building and running tests.
         |#java8.home: /usr/lib/jvm/java-8-oracle/jre
         |
-        |# The location of the remote database repository to use for storing test results
+        |# The remote git repository and branch to use for storing test
+        |# results. This could be a Github repository or it could just be a
+        |# path to a local repository that you've created with `git init`. If
+        |# it's a remote repository and you want to push to that repository,
+        |# be sure to configure appropriate SSH keys in `~/.ssh`.
         |#dbRemote: "https://github.com/playframework/prune.git"
-        |
-        |# The branch of the database repository to use for database results
         |#dbBranch: database
         |
-        |# The location of the remote site repository (often the main Prune repository)
+        |# The remote git repository and branch to use as a results website.
+        |# This could be a Github repository or it could just be a path to a
+        |# local repository that you've created with `git init`. If it's a
+        |# remote repository and you want to push to that repository, be sure
+        |# to configure appropriate SSH keys in `~/.ssh`.
         |#siteRemote: "https://github.com/playframework/prune.git"
-        |# The branch of the site repository to use for site content
-        |#siteBranch: gh-pages
-        |""".stripMargin)
+        |#siteBranch: gh-pages""".stripMargin)
       System.exit(1)
     }
     if (Files.notExists(userConfigFile)) configError("Please create a Prune configuration file.")
