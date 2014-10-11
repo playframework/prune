@@ -2,49 +2,13 @@ Prune — *"Keeping Play moving"*
 
 Prune is a tool for automatically testing the performance of Play Framework. It automates the process of checking out different versions of Play, compiling apps against those versions and then running load tests. It saves all results into files in a Git repository. It also pushes a summary of results to a website. The name *Prune* comes from "Play runner".
 
-[You can see the latest performance results here.](http://playframework.github.io/prune/) The results are updated daily.
+## Daily test results
 
-## How Prune works
+[**You can see the latest performance results here.**](http://playframework.github.io/prune/)
 
-Prune is configured to watch several Play branches and run tests on those branches automatically. It records all test runs in a git repository called the "database".
+[Typesafe](http://typesafe.com/) runs Prune each day on a dedicated server. The server is a [Xeon E5-2430L v2 2.4GHz](http://ark.intel.com/products/75785/Intel-Xeon-Processor-E5-2430-v2-15M-Cache-2_50-GHz) with [Turbo Boost disabled](http://www.brendangregg.com/blog/2014-09-15/the-msrs-of-ec2.html). Raw results are stored in the [*database*](https://github.com/playframework/prune/tree/database) branch of the Prune Github repository.
 
-When Prune is invoked, it will look at the revisions on the branches it is monitoring and compare them to its record of the tests that it has already run. Then it will work out which tests are missing from its records and run them.
-
-This means Prune's behavior is completely declarative. You don't tell Prune to "test revision X of Play with tests A, B and C". Instead you just declare the testing you want, then let Prune figure out how to run it.
-
-There are two consequences of this approach:
-
-* Once a test has been run and its test record written to the database, then Prune will not run that test again. This means that its safe to stop and start Prune at any time and it will not repeat work that it has already done.
-
-* If Prune configuration changes between runs, say to add a new test, then Prune will automatically run that test on all relevant revisions of Play, even if it means going back in time and testing old versions of Play again. This means it is possible to use Prune for backtesting performance.
-
-To run each test, Prune will:
-
-1. Check out revision P of Play and `publish-local` to a private local Ivy directory (usually in `~/.prune/ivy`).
-1. Write the Play build information to the database.
-1. Check out and build the test app needed for the test. It uses `stage` to get a script for running tha app.
-1. Write the app build information to the database.
-1. Start the test app.
-1. Execute [wrk](https://github.com/wg/wrk) twice with the command line arguments needed for the test. The first run is a warmup of 30 seconds. The second is the real test, which runs for 2 minutes.
-1. Write the test results to the database.
-1. Stop the test app.
-
-Actually, this process isn't completely accurate. Prune doesn't recompile Play or the test apps on every test run. It only recompiles when a new version is needed.
-
-### Prune Git repositories
-
-Prune uses Git heavily. It reads from the Play Framework Git repository to track new revisions of Play. Prune requires some application code to use for testing Play. This application code is pulled from a separate Git repository. It stores all test results as flat files, and pushes these to a remote Git repository. Finally, Prune can push test results for a website. The website uses a Git repository too.
-
-Here are the four repositories used by Prune:
-
-* *play* – The Play Framework respository. Generally this will be the [main Play Framework repository](https://github.com/playframework/playframework).
-* *app* – The repository that contains code for test applications. Each branch of Play that Prune tests will generally have a different test application branch. E.g. Play *master* will use the *apps-master* branch, Play *2.3.x* will use the *apps-2.3.x* branch. The "official" versions of these apps are stored as branches in the [main Prune repository](https://github.com/playframework/prune).
-* *db* – The repository that stores test results. This can be anywhere, but the official test results are stored in the *database* branch in the [main Prune repository](https://github.com/playframework/prune).
-* *site* – The repository that store a website for the test results. The official Prune test website is stored in the *gh-pages* branch in the [main Prune repository](https://github.com/playframework/prune).
-
-As you can see, you can actually use one repository for multiple purposes, provided the repository has enough branches in it.
-
-## Example usage
+## Example workflow
 
 A typical Prune workflow involves pulling the latest information from the *play* and *apps* repositories (and rebasing the *db* repositories), running some tests, then pushing results back to the *db* repository. The commands below illustrate this:
 
@@ -68,6 +32,33 @@ Finally, you can get a quick report of test results and remaining tests to run.
 prune print-report
 ```
 
+## How Prune works
+
+Prune is configured to watch several Play branches and run tests on those branches automatically. It records all test runs in a Git repository called the "database".
+
+When Prune is invoked, it will look at the revisions on the branches it is monitoring and compare them to its record of the tests that it has already run. Then it will work out which tests are missing from its records and run them.
+
+This means Prune's behavior is completely declarative. You don't tell Prune to "run tests on HEAD". Instead you just declare the revisions you want tested, then let Prune figure out how to run them.
+
+There are two benefits of this approach:
+
+* Once a test has been run and its test record written to the database, then Prune will not run that test again. This means that its safe to stop and start Prune at any time and it will not repeat work that it has already done.
+
+* If Prune configuration changes between runs, say to add a new test, then Prune will automatically run that test on all relevant revisions of Play, even if it means going back in time and testing old versions of Play again. This means it is possible to use Prune for backtesting performance.
+
+To run a test, Prune will build Play, build a test application, start the application, then run [wrk](https://github.com/wg/wrk). All of this is recorded and written to the database repository.
+
+### Prune Git repositories
+
+There are four logical Git repositories used by Prune. Each repository has a remote location and one or more branches. All repositories have a local directory, usually located within `~/.prune`.
+
+* *play* – The Play Framework respository. Prune uses this to work out which revisions of Play to test and to get the Play source code. Generally this will be the [main Play Framework repository](https://github.com/playframework/playframework).
+* *app* – The repository that contains code for test applications. Prune uses multiple branches in this repository, because different versions of Play will require different test applications. E.g. Play *master* will use the *apps-master* branch, Play *2.3.x* will use the *apps-2.3.x* branch. The default versions of these apps are stored as branches in the [main Prune repository](https://github.com/playframework/prune).
+* *db* (or *database*) – The repository that stores test results. The remote can be located anywhere, even a local directory, but the official test results are stored in the *database* branch in the [main Prune repository](https://github.com/playframework/prune).
+* *site* – The repository that contains the test results website. The official Prune test website is stored in the *gh-pages* branch in the [main Prune repository](https://github.com/playframework/prune).
+
+By default the Prune Github repository actually serves as the remote for the *apps*, *db* and *site* repositories. It is fine to use different repositories too. If the same repository is used then different branches are needed for each purpose.
+
 ## Building Prune
 
 Prune is a command line JVM application written in Scala. Use [sbt](http://www.scala-sbt.org/) to build it.
@@ -79,9 +70,9 @@ The script for launching Prune can be found in `<target-dir>/prune-1.0/bin/prune
 
 ## Configuring Prune
 
-Before you run Prune you need to configure it. Prune uses [Typesafe Config](https://github.com/typesafehub/config) for its configuration. Most configuration is defined in a [`reference.conf`](https://github.com/playframework/prune/blob/master/src/main/resources/reference.conf) file. The default configuration is overridden by a configuration file in `~/.prune/prune.config`. All configuration in this file is automatically prefixed with the path `com.typesafe.play.prune`. Some keys are not defined in `reference.conf` so they always need to be provided by the user in the `~/.prune/prune.config` file.
+Before you run Prune you need to configure it. Prune uses [Typesafe Config](https://github.com/typesafehub/config) for its configuration. Most configuration is defined in a [`reference.conf`](https://github.com/playframework/prune/blob/master/src/main/resources/reference.conf) file. The default configuration is overridden by a configuration file in `~/.prune/prune.config`. All configuration in `prune.config` is automatically prefixed with the path `com.typesafe.play.prune`. Some keys are not defined in `reference.conf` so they always need to be provided by the user in the `~/.prune/prune.config` file.
 
-Create a file called `~/.prune/prune.config` and provide values for all the keys below.
+Here is a template for a `~/.prune/prune.config` file. All keys are required.
 
 ```
 # The UUID used to identify this instance of Prune in test records.
@@ -112,7 +103,7 @@ Create a file called `~/.prune/prune.config` and provide values for all the keys
 
 ## Running Prune
 
-Prune understands a number of different commands. The script for launching Prune is `prune-1.0/bin/prune`, located at the place where you extracted the zip file.
+Prune understands a number of different commands. The script for launching Prune is `prune-1.0/bin/prune`, located at the place where you extracted the `dist` zip file.
 
 ### pull
 
@@ -139,22 +130,37 @@ Examples:
 
 This command runs all remaining tests. Prune will:
 
-1. look at its configuration to see which Play branches and revisions it is interested in
-1. look at the Play repository to get a list of revisions
-1. look at the database repository to see which tests have already been run
-1. create a plan of all the tests that need to be run
-1. run them one at a time (see *How Prune works* for more info)
+1. Look at its configuration to see which Play branches and revisions it is interested in.
+1. Look at the Play repository to get a list of revisions.
+1. Look at the database repository to see which tests have already been run.
+1. Create a plan of all the tests that need to be run.
+1. Run each test, one at a time.
+
+For each test, Prune will:
+
+1. Check out revision P of Play and `publish-local` to a private local Ivy directory (usually in `~/.prune/ivy`).
+1. Write the Play build information to the database.
+1. Check out and build the test app needed for the test. It uses `stage` to get a script for running tha app.
+1. Write the app build information to the database.
+1. Start the test app.
+1. Execute [wrk](https://github.com/wg/wrk) twice with the command line arguments needed for the test. The first run is a warmup of 30 seconds. The second is the real test, which runs for 2 minutes.
+1. Write the test results to the database.
+1. Stop the test app.
+
+Actually, this process isn't completely accurate. Prune doesn't recompile Play or the test apps on every test run. It only recompiles when a new version is needed.
 
 All results are written to the database repository.
 
 Examples:
 
 * Run all tests.
+
   ```
   prune test
   ```
 
 * Run at most one test.
+
   ```
   prune test --max-test-runs 1
   ```
@@ -173,9 +179,58 @@ Examples:
 
 ### push-test-results
 
-This command pushes the test results in the database repository to the remote repository. This command doesn't need to be run, but it is useful for backing up results.
+This command pushes the test results in the database repository to the remote repository. This command doesn't need to be run unless you wish to back up or share files via the remote database repository.
 
 * Push the test results to the database repository.
+
   ```
   prune push-test-results
+  ```
+
+### print-report
+
+This command prints out a simple report of test results.
+
+Examples:
+
+* Print out report.
+
+  ```
+  prune print-report
+  ```
+
+### pull-site
+
+This command pulls the files from the remote site repository to the local repository.
+
+Examples:
+
+* Pull the remote site files.
+
+  ```
+  prune pull-site
+  ```
+
+### generate-site-files
+
+This command generates a new JSON file containing the test results and saves it in the local copy of the site repository.
+
+Examples:
+
+* Generate new site files based on the latest test results.
+
+  ```
+  prune generate-site-files
+  ```
+
+### push-site
+
+This command pushes the local site files to the remote repository
+
+Examples:
+
+* Push the local site files.
+
+  ```
+  prune push-site
   ```
