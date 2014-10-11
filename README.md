@@ -6,7 +6,7 @@ Prune is a tool for automatically testing the performance of Play Framework. It 
 
 [**You can see the latest performance results here.**](http://playframework.github.io/prune/)
 
-[Typesafe](http://typesafe.com/) runs Prune each day on a dedicated server. The server is a [Xeon E5-2430L v2 2.4GHz](http://ark.intel.com/products/75785/Intel-Xeon-Processor-E5-2430-v2-15M-Cache-2_50-GHz) with [Turbo Boost disabled](http://www.brendangregg.com/blog/2014-09-15/the-msrs-of-ec2.html). Raw results are stored in the [*database*](https://github.com/playframework/prune/tree/database) branch of the Prune Github repository.
+Prune is run each day on a dedicated server donated by [Typesafe](http://typesafe.com/). The server is a [Xeon E5-2430L v2 2.4GHz](http://ark.intel.com/products/75785/Intel-Xeon-Processor-E5-2430-v2-15M-Cache-2_50-GHz) with [Turbo Boost disabled](http://www.brendangregg.com/blog/2014-09-15/the-msrs-of-ec2.html). Raw test results are pushed in the [*database*](https://github.com/playframework/prune/tree/database) branch of the Prune Github repository.
 
 ## Example workflow
 
@@ -234,3 +234,31 @@ Examples:
   ```
   prune push-site
   ```
+
+## Tests
+
+Prune currently runs the following tests. More tests are planned in the future, e.g. tests for non-GET request, tests for WS, etc.
+
+### scala-simple / java-simple
+
+Tests an action that sends a plain text response of `Hello world.`.
+
+### scala-download-50k / java-download-50k
+
+Tests an action that parses an integer parameter of 51200 (50k) then sends a binary response of that length.
+
+### scala-download-chunked-50k / java-download-50k
+
+Tests an action that parses an integer parameter of 51200 (50k) then sends a binary response in 4k chunks.
+
+### scala-json-encode / java-json-encode
+
+Test an action that encodes and returns a JSON object of `{"message":"Hello World!"}`.
+
+### scala-template-simple / java-template-simple
+
+Test an action that returns a short HTML page generated from a template that takes a single parameter.
+
+### scala-template-lang / java-template-lang
+
+Test an action that returns a short HTML page generated from a template that takes an implicit language.
