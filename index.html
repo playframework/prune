@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<title>Prune results</title>
+<script src="jquery-1.11.1.min.js" charset="utf-8"></script>
+<script src="jquery.flot-0.8.3.min.js" charset="utf-8"></script>
+<script src="jquery.flot.time-0.8.3.min.js" charset="utf-8"></script>
+<script src="prune-data.js"></script>
+<style>
+th.test {
+  color: #454545;
+  font-family: "HelveticaNeue-CondensedBold","Open Sans Condensed","Helvetica",sans-serif;
+  color: rgb(150, 147, 141);
+  text-transform: uppercase;
+  padding-top: 30px;
+}
+.flot-tick-label, dt, dd {
+  font-family: 'Helvetica Neue', Helvetica, sans-serif;
+  color: rgb(51, 51, 51);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+dd {
+  text-transform: none;
+}
+#tooltip {
+  background: white;
+  padding: 5px;
+}
+#tt-commit, #tt-run {
+  font-family: monospace;
+}
+tr.rps .flot-x-axis .flot-tick-label {
+  color: #ffffff;
+}
+div.rotated {
+  -moz-transform: rotate(-90deg);
+  -webkit-transform: rotate(-90deg);
+  -o-transform: rotate(-90deg);
+  -ms-transform: rotate(-90deg);
+}
+.chart {
+  width: 300px;
+}
+tr.rps .chart {
+  height: 200px;  
+}
+tr.latency .chart {
+  height: 150px;  
+}
+th.label {
+  white-space: nowrap;
+  font-family: 'Helvetica Neue', Helvetica, sans-serif;
+  color: rgb(51, 51, 51);
+  font-size: 14px;
+  font-weight: normal;
+}
+#tooltip {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+}
+</style>
+<script>
+$(function () {
+function commitTestData(commit, testName) {
+  var commitResults = report.results[commit];
+  if (!commitResults) return null;
+  return commitResults[testName];
+}
+function branchData(branchName, testName) {
+  var data = [];
+  report.branches[branchName].forEach(function(commitInfo) {
+    //console.log(commitInfo.commit);
+    var datum = {};
+    $.extend(datum, commitInfo);
+    var result = commitTestData(commitInfo.commit, testName);
+    if (result) $.extend(datum, result);
+    data.push(datum);
+  });
+  return data.reverse();
+}
+function timeSeries(branchName, testName, resultName) {
+  return branchData(branchName, testName).map(function(d) {
+    return [d.time, d[resultName]];
+  });
+}
+
+function appendChart(element, branchTestData, seriesInfo, options) {
+  var series = seriesInfo.map(function(si) {
+    return {
+      data: branchTestData.map(function(d) {
+        return [d.time, d[si.resultName]];
+      }),
+      lines: { lineWidth: si.lineWidth },
+      // define points so we can see individual items of data
+      points: {
+        radius: si.lineWidth / 2, // makes points the same width as the lines
+        lineWidth: 0,
+        fill: true,
+        fillColor: options.color
+      },
+      shadowSize: 0,
+      color: options.color
+    }
+  });
+
+  var chartElement = $('<div class="chart"></div>').appendTo(element);
+
+  var plot = $.plot(chartElement, series, {
+    series: {
+      lines: { show: true },
+      points: { show: true }
+    },
+    xaxis: {
+      mode: 'time',
+      timezone: 'browser',
+      minTickSize: [7, "day"],
+      reserveSpace: true,
+      min: report.start,
+      max: report.end
+    },
+    yaxis: {
+      min: 0,
+      max: options.max,
+      labelWidth: 40
+    },
+    grid: {
+      show: true,
+      hoverable: true,
+      clickable: true,
+      autoHighlight: false,
+      mouseActiveRadius: 20
+    }
+  });
+  return {element: chartElement, plot: plot};
+}
+
+var branchNames = ['master', '2.3.x'];
+var testNameBeginnings = ['scala', 'java'];
+var testNameEndings = [
+  'simple',
+  'download-50k',
+  'download-chunked-50k',
+  'json-encode',
+  'template-simple',
+  'template-lang'
+];
+
+var tableElement = $('<table></table>').appendTo($('#placeholder'));
+testNameEndings.forEach(function(testNameEnding) {
+  function rowForEach(f) {
+    var i = 0;
+    branchNames.forEach(function(branchName) {
+      testNameBeginnings.forEach(function(testNameBeginning) {
+        var testName = testNameBeginning + '-' + testNameEnding;
+        f(branchName, testName, branchData(branchName, testName), i++);
+      });
+    });
+  }
+
+  var headerRowElement = $('<tr><th></th></tr>').appendTo(tableElement);
+  rowForEach(function(branchName, testName, branchTestData) {
+    var headerElement = $('<th class="test">'+branchName+' / '+testName+'</th>').appendTo(headerRowElement);
+  });
+
+  var maxRps = 0;
+  var maxLat = 0;
+  rowForEach(function(branchName, testName, branchTestData) {
+    function maxForResult(resultName) {
+      var max = 0;
+      branchTestData.forEach(function(d) {
+        var r = d[resultName];
+        if (r != null && max < r) { max = r; }
+      });
+      return max;
+    }
+    maxRps = Math.max(maxRps, maxForResult('req/s'));
+    maxLat = Math.max(maxLat, maxForResult('latMean'));
+    maxLat = Math.max(maxLat, maxForResult('lat95'));
+  });
+  function niceMax(max) {
+    // Code adapted from jquery.flot.js
+    var noTicks = 5;
+    var delta = max / noTicks;
+    var dec = -Math.floor(Math.log(delta) / Math.LN10);
+    var magn = Math.pow(10, -dec);
+    var norm = delta / magn; // norm is between 1.0 and 10.0
+    var size;
+    if (norm < 1.5) {
+        size = 1;
+    } else if (norm < 3) {
+        size = 2;
+        // special case for 2.5, requires an extra decimal
+        if (norm > 2.25) {
+            size = 2.5;
+            ++dec;
+        }
+    } else if (norm < 7.5) {
+        size = 5;
+    } else {
+        size = 10;
+    }
+    size *= magn;
+    return Math.ceil((max / size) + 0.1) * size;
+  }
+
+  function appendChartRow(rowClass, yAxisLabel, yaxisLabelOffset, seriesInfo, chartOptions) {
+    var chartRowElement = $('<tr class="chartRow"><th class="label"><div>'+yAxisLabel+'</div></th></tr>').appendTo(tableElement);
+    chartRowElement.addClass(rowClass);
+    var labelDiv = chartRowElement.find('div');
+    var origLabelDivHeight = labelDiv.height(); // Get height before rotation
+    var transform = "translate(0px, "+yaxisLabelOffset+"px) rotate(-90deg)";
+    labelDiv.css({
+      'width': origLabelDivHeight,
+      "-moz-transform": transform,
+      "-webkit-transform": transform,
+      "-o-transform": transform,
+      "-ms-transform": transform
+    });
+    var charts = [];
+    rowForEach(function(branchName, testName, branchTestData) {
+      var dataElement = $('<td></td>').appendTo(chartRowElement);
+      var chart = appendChart(dataElement, branchTestData, seriesInfo, chartOptions);
+      charts.push(chart);
+    });
+    return charts;
+  }
+
+  var rpsCharts = appendChartRow(
+    'rps',
+    'Request/s',
+    17,
+    [
+      {
+        resultName: 'req/s',
+        lineWidth: 4
+      }
+    ],
+    {
+      showXaxislabels: false,
+      yaxisLabel: 'Req/s',
+      color: '#88C557',
+      max: niceMax(maxRps)
+    }
+  );
+
+  var latCharts = appendChartRow(
+    'latency',
+    'Latency (ms)',
+    23,
+    [
+      {
+        resultName: 'latMean',
+        lineWidth: 4
+      },
+      {
+        resultName: 'lat95',
+        lineWidth: 2
+      }
+    ],
+    {
+      showXaxislabels: true,
+      yaxisLabel: 'Latency (ms)',
+      color: '#5AB0A9',
+      max: niceMax(maxLat)
+    }
+  );
+
+  $('#tooltip').hide();
+
+  rowForEach(function(branchName, testName, branchTestData, i) {
+    var rpsChart = rpsCharts[i];
+    var latChart = latCharts[i];
+    function hover(event, pos, item) {
+      rpsChart.plot.unhighlight();
+      latChart.plot.unhighlight();
+      $('#tooltip').hide();
+      if (item) {
+        rpsChart.plot.highlight(0, item.dataIndex);
+        latChart.plot.highlight(0, item.dataIndex);
+        latChart.plot.highlight(1, item.dataIndex);
+
+        var data = branchTestData[item.dataIndex];
+        $('#tt-commit').text(data.commit);
+        $('#tt-time').text(new Date(data.time));
+        $('#tt-run').text(data.run);
+        $('#tt-rps').text(data['req/s'].toFixed(0));
+        $('#tt-latMean').text(data.latMean.toFixed(2));
+        $('#tt-lat95').text(data.lat95.toFixed(2));
+        $('#tooltip').show();
+      }
+    }
+    rpsChart.element.bind("plothover", hover);
+    latChart.element.bind("plothover", hover);
+    function click(event, pos, item) {
+      var data = branchTestData[item.dataIndex];
+      var url = 'https://github.com/playframework/playframework/commit/'+data.commit
+      window.open(url, '_blank');
+    }
+    rpsChart.element.bind("plotclick", click);
+    latChart.element.bind("plotclick", click);
+  });
+
+});
+
+});
+</script>
+</head>
+<body>
+<div id="placeholder"></div>
+<div id="tooltip">
+  <dl>
+    <dt>Run</dt><dd id="tt-run"></dd>
+    <dt>Commit</dt><dd id="tt-commit"></dd>
+    <dt>Time</dt><dd id="tt-time"></dd>
+    <dt>Request/s</dt><dd id="tt-rps"></dd>
+    <dt>Mean latency (ms)</dt><dd id="tt-latMean"></dd>
+    <dt>95% latency (ms)</dt><dd id="tt-lat95"></dd>
+  </dl>
+</div>
+</body>
+</html>
