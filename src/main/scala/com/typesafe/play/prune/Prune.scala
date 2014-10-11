@@ -163,17 +163,18 @@ object Prune {
 
     @tailrec
     def loop(taskQueue: Seq[TestTask]): Unit = {
-      val now = DateTime.now
-      deadline match {
-        case Some(d) if now.isAfter(d) =>
-          val targetMins: Int = ctx.args.maxTotalMinutes.get
-          val actualMins: Int = new Duration(d, now).getStandardMinutes.toInt
-          println(s"Stopping tests after ${actualMins} minutes because --max-total-minutes ${targetMins} exceeded: ${taskQueue.size} tests remaining")
-        case _ =>
-          RunTest.runTestTask(taskQueue.head)
-          loop(taskQueue.tail)
+      if (taskQueue.isEmpty) () else {
+        val now = DateTime.now
+        deadline match {
+          case Some(d) if now.isAfter(d) =>
+            val targetMins: Int = ctx.args.maxTotalMinutes.get
+            val actualMins: Int = new Duration(d, now).getStandardMinutes.toInt
+            println(s"Stopping tests after ${actualMins} minutes because --max-total-minutes ${targetMins} exceeded: ${taskQueue.size} tests remaining")
+          case _ =>
+            RunTest.runTestTask(taskQueue.head)
+            loop(taskQueue.tail)
+        }
       }
-      
     }
     loop(truncatedTasksToRun)
   }
