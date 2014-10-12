@@ -5,6 +5,7 @@ package com.typesafe.play.prune
 
 import java.nio.file._
 import java.util.{ List => JList }
+import org.apache.commons.io.FileUtils
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib._
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
@@ -48,7 +49,7 @@ object PruneGit {
     val desc = s"$remote $branchesString into $localDir and checking out $branchToCheckout"
 
     val localDirPath = Paths.get(localDir)
-    if (Files.notExists(localDirPath)) {
+    def clone(): Unit = {
       println(s"Cloning $desc...")
       Files.createDirectories(localDirPath.getParent)
       Git.cloneRepository
@@ -57,28 +58,35 @@ object PruneGit {
         .setBranch(branchToCheckout)
         .setDirectory(localDirPath.toFile).call()
       println("Clone done.")
+    }
+    if (Files.notExists(localDirPath)) {
+      clone()
     } else {
-      println(s"Pulling $desc...")
-      withRepository(localDir) { repository =>
-        validateRemoteOrigin(repository, remote)
-        val git: Git = new Git(repository)
+      val originMatches = withRepository(localDir)(remoteOriginMatches(_, remote))
+      if (!originMatches) {
+        println("Remote changed")
+        FileUtils.deleteDirectory(localDirPath.toFile)
+        clone()
+      } else {
+        println(s"Pulling $desc...")
+        withRepository(localDir) { repository =>
+          val git: Git = new Git(repository)
 
-        {
           val existingBranches = asScalaBuffer(git.branchList.call()).map(_.getName.split('/').last)
           val missingBranches = branches diff existingBranches
           for (b <- missingBranches) {
             git.branchCreate.setName(b).setStartPoint(s"refs/remotes/origin/$b").call()
           }
-        }
-        {
+
           val refSpecs = branches.map(refSpec)
           git.fetch().setRemote("origin").setRefSpecs(refSpecs: _*).call()
-        }
-        val branchOperationOrder = branches.filter(_ != branchToCheckout) :+ branchToCheckout // Reorder so `branch` is checked out last
-        for (b <- branchOperationOrder) {
-          git.checkout().setName(b).call()
-          val result = git.rebase().setUpstream(s"refs/remotes/origin/$b").call()
-          println(s"Branch $b: ${result.getStatus}")
+
+          val branchOperationOrder = branches.filter(_ != branchToCheckout) :+ branchToCheckout // Reorder so `branch` is checked out last
+          for (b <- branchOperationOrder) {
+            git.checkout().setName(b).call()
+            val result = git.rebase().setUpstream(s"refs/remotes/origin/$b").call()
+            println(s"Branch $b: ${result.getStatus}")
+          }
         }
       }
       println("Pull done")
@@ -86,13 +94,13 @@ object PruneGit {
 
   }
 
-  private def validateRemoteOrigin(repository: Repository, remote: String): Unit = {
+  private def remoteOriginMatches(repository: Repository, remote: String): Boolean = {
     val config = repository.getConfig
     val remoteConfig = new RemoteConfig(config, "origin")
     val existingURIs = remoteConfig.getURIs
     assert(existingURIs.size == 1)
     val existingRemote = existingURIs.get(0).toString
-    assert(existingRemote == remote, s"Remote URI for origin must be $remote, was $existingRemote")
+    return existingRemote == remote
   }
 
   def gitCheckout(localDir: String, branch: String, commit: String): Unit = {

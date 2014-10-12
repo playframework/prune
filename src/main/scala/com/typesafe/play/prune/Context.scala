@@ -89,6 +89,9 @@ case class Args(
   appsFetch: Boolean = true,
   maxTestRuns: Option[Int] = None,
   maxWrkDuration: Option[Int] = None,
+  playBranches: Seq[String] = Seq.empty,
+  playRevs: Seq[String] = Seq.empty,
+  testNames: Seq[String] = Seq.empty,
   maxTotalMinutes: Option[Int] = None,
   outputFile: Option[String] = None)
 object Args {
@@ -122,6 +125,15 @@ object Args {
         },
         opt[Int]("max-total-minutes") action { (i, c) =>
           c.copy(maxTotalMinutes = Some(i))
+        },
+        opt[String]("play-branch") optional() unbounded() action { (s, c) =>
+          c.copy(playBranches = c.playBranches :+ s)
+        },
+        opt[String]("play-rev") optional() unbounded() action { (s, c) =>
+          c.copy(playRevs = c.playRevs :+ s)
+        },
+        opt[String]("test-name") optional() unbounded() action { (s, c) =>
+          c.copy(testNames = c.testNames :+ s)
         }
       )
       cmd("push-test-results") action { (_, c) =>

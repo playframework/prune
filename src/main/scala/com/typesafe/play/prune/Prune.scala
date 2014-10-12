@@ -122,13 +122,17 @@ object Prune {
       DateTime.now.plusMinutes(mins)
     }
 
-    val neededTasks: Seq[TestTask] = ctx.playTests.flatMap { playTest =>
+    val filteredPlayTests = ctx.playTests.filter(pt => ctx.args.playBranches.contains(pt.playBranch))
+    val neededTasks: Seq[TestTask] = filteredPlayTests.flatMap { playTest =>
       //println(s"Working out tests to run for $playTest")
 
       val appsId: AnyObjectId = PruneGit.resolveId(ctx.appsHome, playTest.appsBranch, playTest.appsRevision)
-      val playCommits = playCommitsToTest(playTest)
-      playCommits.flatMap { playCommit =>
-        playTest.testNames.map { testName =>
+      val playCommits: Seq[String] = playCommitsToTest(playTest)
+      val playCommitFilter: Seq[String] = ctx.args.playRevs.map(r => PruneGit.resolveId(ctx.playHome, playTest.playBranch, r).name)
+      val filteredPlayCommits: Seq[String] = playCommits.filter(c => playCommitFilter.contains(c))
+      filteredPlayCommits.flatMap { playCommit =>
+        val filteredTestNames = playTest.testNames.filter(n => ctx.args.testNames.contains(n))
+        filteredTestNames.map { testName =>
           val testApp = ctx.testConfig.get(testName).map(_.app).getOrElse(sys.error(s"No test config for $testName"))
           TestTask(
             info = TestTaskInfo(
@@ -160,6 +164,12 @@ object Prune {
     println(s"Prune tests already executed: ${completedPlayCommitCount} Play revisions, ${completedTaskInfos.size} test runs")
     println(s"Prune tests needed: ${neededPlayCommitCount} Play revisions, ${neededTasks.size} test runs")
     println(s"Prune tests remaining: ${playCommitsToRunCount} Play revisions, ${tasksToRun.size} test runs")
+
+//    type TestFilter = Seq[TestTask] => Seq[TestTask]
+//
+//    val filters: Seq[Seq[TestTask] => Seq[TestTask]] =
+//      ctx.args.maxTestRuns.map(i => ((s: Seq[TestTask]) => s.take(i))).toSeq ++
+//      ctx.args.playRev.map(r => ((s: Seq[TestTask]) => s.filter(_.playCommit.startsWith(r))).toSeq ++
 
     val truncatedTasksToRun = ctx.args.maxTestRuns.fold(tasksToRun) { i =>
       if (tasksToRun.size > i) {

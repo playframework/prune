@@ -193,6 +193,24 @@ Examples:
   prune test --max-test-runs 1
   ```
 
+* Run tests for the master branch.
+
+  ```
+  test --play-branch master
+  ```
+
+* Run only the `scala-di-simple` test.
+
+  ```
+  test --test-name scala-di-simple
+  ```
+
+* Run only the `scala-di-simple` test for the HEAD revision of master.
+
+  ```
+  test --play-branch master --play-rev HEAD --test-name scala-di-simple
+  ```
+
 * Run tests until 30 minutes have passed. Prune will run as many tests as it can until this time limit is reached. Note: Prune may run slightly longer than the given time, because it only checks the time at the start of each new test run.
 
   ```
