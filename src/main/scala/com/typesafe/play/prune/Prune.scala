@@ -122,16 +122,20 @@ object Prune {
       DateTime.now.plusMinutes(mins)
     }
 
-    val filteredPlayTests = ctx.playTests.filter(pt => ctx.args.playBranches.contains(pt.playBranch))
+    def filterBySeq[A,B](input: Seq[A], filters: Seq[B], extract: A => B): Seq[A] = {
+      if (filters.isEmpty) input else input.filter(a => filters.contains(extract(a)))
+    }
+
+    val filteredPlayTests = filterBySeq(ctx.playTests, ctx.args.playBranches, (_: PlayTestsConfig).playBranch)
     val neededTasks: Seq[TestTask] = filteredPlayTests.flatMap { playTest =>
       //println(s"Working out tests to run for $playTest")
 
       val appsId: AnyObjectId = PruneGit.resolveId(ctx.appsHome, playTest.appsBranch, playTest.appsRevision)
       val playCommits: Seq[String] = playCommitsToTest(playTest)
       val playCommitFilter: Seq[String] = ctx.args.playRevs.map(r => PruneGit.resolveId(ctx.playHome, playTest.playBranch, r).name)
-      val filteredPlayCommits: Seq[String] = playCommits.filter(c => playCommitFilter.contains(c))
+      val filteredPlayCommits: Seq[String] = filterBySeq(playCommits, playCommitFilter, identity[String])
       filteredPlayCommits.flatMap { playCommit =>
-        val filteredTestNames = playTest.testNames.filter(n => ctx.args.testNames.contains(n))
+        val filteredTestNames = filterBySeq(playTest.testNames, ctx.args.testNames, identity[String])
         filteredTestNames.map { testName =>
           val testApp = ctx.testConfig.get(testName).map(_.app).getOrElse(sys.error(s"No test config for $testName"))
           TestTask(
