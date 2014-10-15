@@ -20,18 +20,6 @@ object BuildApp {
 
     BuildPlay.buildPlay(playBranch = playBranch, playCommit = playCommit)
 
-    val buildCommands: Seq[Command] = Seq(
-      Command(
-        "sbt",
-        Seq("-Dsbt.ivy.home=<ivy.home>", "stage"),
-        workingDir = s"<tests.home>/$appName",
-        env = Map(
-          "JAVA_HOME" -> "<java8.home>",
-          "LANG" -> "en_US.UTF-8"
-        )
-      )
-    )
-
     val javaVersionExecution: Execution = JavaVersion.captureJavaVersion()
 
     val lastPlayBuildId: UUID = PrunePersistentState.read.flatMap(_.lastPlayBuild).getOrElse {
@@ -70,7 +58,7 @@ object BuildApp {
         }
       }
 
-      val buildExecutions = buildCommands.map(run(_, Pump))
+      val buildExecutions = buildAppDirectly(appName)
 
       val newAppBuildRecord = AppBuildRecord(
         playBuildId = lastPlayBuildId,
@@ -86,4 +74,28 @@ object BuildApp {
     }
 
   }
+
+  def buildAppDirectly(appName: String)(implicit ctx: Context): Seq[Execution] = {
+
+    // Clear local target directory to ensure an isolated build
+    val targetDir = Paths.get(ctx.appsHome, appName, "target")
+    if (Files.exists(targetDir)) {
+      FileUtils.deleteDirectory(targetDir.toFile)
+    }
+
+    val buildCommands: Seq[Command] = Seq(
+      Command(
+        "sbt",
+        Seq("-Dsbt.ivy.home=<ivy.home>", "stage"),
+        workingDir = s"<apps.dir>/$appName",
+        env = Map(
+          "JAVA_HOME" -> "<java8.home>",
+          "LANG" -> "en_US.UTF-8"
+        )
+      )
+    )
+
+    buildCommands.map(run(_, Pump))
+  }
+
 }

@@ -87,6 +87,7 @@ object Prune {
       case Some(PullSite) => pullSite
       case Some(GenerateSiteFiles) => generateSiteFiles
       case Some(PushSite) => pushSite
+      case Some(Wrk) => wrk
     }
 
   }
@@ -231,13 +232,10 @@ object Prune {
       val resultMap = getResults(playCommits, testName)
       println(s"Test $testName on ${playTestConfig.playBranch}")
       for (playCommit <- playCommits) {
-        val wrkOutput: Option[String] = resultMap.get(playCommit).flatMap(_.wrkOutput)
-        val wrkResult: Option[WrkResult] = wrkOutput.flatMap(Results.parseWrkOutput)
-        val resultDisplay: String = wrkResult.map { wr =>
-          s"Requests/s: ${wr.requests.toDouble / wr.duration.toDouble * 1000000}, "+
-            s"Mean latency: ${wr.latency.mean}, " +
-            s"Latency 95%: ${wr.latency.percentiles(95)}"
-        }.getOrElse("-")
+        val testResult: Either[String, TestResult] = resultMap.get(playCommit).toRight("<no result for commit>")
+        val wrkOutput: Either[String, String] = testResult.right.flatMap(_.wrkOutput.toRight("<no wrk stdout for test run>"))
+        val wrkResult: Either[String, WrkResult] = wrkOutput.right.flatMap(Results.parseWrkOutput)
+        val resultDisplay: String = wrkResult.right.flatMap(_.summary.right.map(_.display)).merge
         println(s"${playCommit.substring(0,7)} $resultDisplay")
       }
     }
@@ -278,6 +276,24 @@ object Prune {
       branch = ctx.siteBranch,
       localDir = ctx.siteHome,
       commitMessage = "Updated generated files")
+  }
+
+  def wrk(implicit ctx: Context): Unit = {
+    val testOrAppName: String = ctx.args.testOrAppName.get
+    val testConfig: Option[TestConfig] = ctx.testConfig.get(testOrAppName)
+    val appName = testConfig.fold(testOrAppName)(_.app)
+    val wrkArgs = testConfig.fold(Seq.empty[String])(_.wrkArgs) ++ ctx.args.wrkArgs
+    if (ctx.args.playBuild) {
+      BuildPlay.buildPlayDirectly()
+    }
+    if (ctx.args.appBuild) {
+      BuildApp.buildAppDirectly(appName)
+    }
+    val testExecutions = RunTest.runTestDirectly(appName, wrkArgs)
+    val eitherStdout: Either[String, String] = testExecutions.wrkExecutions.last.stdout.toRight("No stdout from wrk")
+    val wrkResult: Either[String, WrkResult] = eitherStdout.right.flatMap(Results.parseWrkOutput)
+    val message: String = wrkResult.right.flatMap(_.summary.right.map(_.display)).merge
+    println(message)
   }
 
 }

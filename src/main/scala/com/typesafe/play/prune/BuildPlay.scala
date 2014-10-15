@@ -25,22 +25,7 @@ import PruneGit._
 object BuildPlay {
   def buildPlay(playBranch: String, playCommit: String)(implicit ctx: Context): PlayBuildRecord = {
 
-    val buildCommands: Seq[Command] = Seq(
-      Command(
-        program = "./build",
-        args = Seq("-Dsbt.ivy.home=<ivy.home>", "publish-local"),
-        env = Map(
-          "JAVA_HOME" -> "<java8.home>",
-          "LANG" -> "en_US.UTF-8"
-        ),
-        workingDir = "<play.home>/framework"
-      )
-    )
-
     val javaVersionExecution: Execution = JavaVersion.captureJavaVersion()
-
-    val ivyHome: String = ctx.config.getString("ivy.home")
-    val localIvyRepository: Path = Paths.get(ivyHome).resolve("local")
 
     val lastPlayBuildId: Option[UUID] = PrunePersistentState.read.flatMap(_.lastPlayBuild)
     val lastPlayBuildRecord: Option[PlayBuildRecord] = lastPlayBuildId.flatMap(PlayBuildRecord.read)
@@ -64,18 +49,7 @@ object BuildPlay {
         branch = playBranch,
         commit = playCommit)
 
-      // Clear target directories and local Ivy repository to ensure an isolated build
-      Seq(
-        localIvyRepository,
-        Paths.get(ctx.playHome, "framework/target"),
-        Paths.get(ctx.playHome, "framework/project/target")
-      ) foreach { p =>
-        if (Files.exists(p)) {
-          FileUtils.deleteDirectory(p.toFile)
-        }
-      }
-
-      val executions: Seq[Execution] = buildCommands.map(run(_, Pump))
+      val executions: Seq[Execution] = buildPlayDirectly()
       val newPlayBuildRecord = PlayBuildRecord(
         pruneInstanceId = ctx.pruneInstanceId,
         playCommit = playCommit,
@@ -88,4 +62,37 @@ object BuildPlay {
       newPlayBuildRecord
     }
   }
+
+  private def localIvyRepository(implicit ctx: Context): Path = {
+    val ivyHome: String = ctx.config.getString("ivy.home")
+    Paths.get(ivyHome).resolve("local")
+  }
+
+  def buildPlayDirectly()(implicit ctx: Context): Seq[Execution] = {
+    // Clear target directories and local Ivy repository to ensure an isolated build
+    Seq(
+      localIvyRepository,
+      Paths.get(ctx.playHome, "framework/target"),
+      Paths.get(ctx.playHome, "framework/project/target")
+    ) foreach { p =>
+      if (Files.exists(p)) {
+        FileUtils.deleteDirectory(p.toFile)
+      }
+    }
+
+    val buildCommands: Seq[Command] = Seq(
+      Command(
+        program = "./build",
+        args = Seq("-Dsbt.ivy.home=<ivy.home>", "publish-local"),
+        env = Map(
+          "JAVA_HOME" -> "<java8.home>",
+          "LANG" -> "en_US.UTF-8"
+        ),
+        workingDir = "<play.home>/framework"
+      )
+    )
+
+    buildCommands.map(run(_, Pump))
+  }
+
 }

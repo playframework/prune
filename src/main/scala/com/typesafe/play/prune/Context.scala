@@ -17,10 +17,10 @@ case class Context(
   val ivyHome = config.getString("ivy.home")
 
   val playRemote = config.getString("playRemote")
-  val playHome = config.getString("playHome")
+  val playHome = args.playHome.getOrElse(config.getString("playHome"))
 
   val appsRemote = config.getString("appsRemote")
-  val appsHome = config.getString("appsHome")
+  val appsHome = args.appsHome.getOrElse(config.getString("appsHome"))
 
   val dbRemote = config.getString("dbRemote")
   val dbBranch = config.getString("dbBranch")
@@ -80,6 +80,7 @@ case object GenerateJsonReport extends CommandArg
 case object PullSite extends CommandArg
 case object GenerateSiteFiles extends CommandArg
 case object PushSite extends CommandArg
+case object Wrk extends CommandArg
 
 case class Args(
   command: Option[CommandArg] = None,
@@ -93,7 +94,13 @@ case class Args(
   playRevs: Seq[String] = Seq.empty,
   testNames: Seq[String] = Seq.empty,
   maxTotalMinutes: Option[Int] = None,
-  outputFile: Option[String] = None)
+  outputFile: Option[String] = None,
+  playHome: Option[String] = None,
+  appsHome: Option[String] = None,
+  testOrAppName: Option[String] = None,
+  wrkArgs: Seq[String] = Seq.empty,
+  playBuild: Boolean = true,
+  appBuild: Boolean = true)
 object Args {
   def parse(rawArgs: Seq[String]) = {
     val parser = new scopt.OptionParser[Args]("prune") {
@@ -158,6 +165,23 @@ object Args {
       cmd("push-site") action { (_, c) =>
         c.copy(command = Some(PushSite))
       } text("Push site to remote repository")
+      cmd("wrk") action { (_, c) =>
+        c.copy(command = Some(Wrk))
+      } text("Run wrk on your local Play code") children(
+        arg[String]("<play-home>") action { (s, c) => c.copy(playHome = Some(s)) } text("Play directory"),
+        arg[String]("<apps-home>") action { (s, c) => c.copy(appsHome = Some(s)) } text("App directory"),
+        arg[String]("<app-name>") action { (s, c) => c.copy(testOrAppName = Some(s)) } text("Test name or app name"),
+        arg[String]("[<wrk arg>...]") optional() unbounded() action { (s, c) => c.copy(wrkArgs = c.wrkArgs :+ s) } text("Wrk arguments"),
+        opt[Int]("max-wrk-duration") action { (i, c) =>
+          c.copy(maxWrkDuration = Some(i))
+        },
+        opt[Unit]("skip-play-build") action { (_, c) =>
+          c.copy(playBuild = false)
+        },
+        opt[Unit]("skip-app-build") action { (_, c) =>
+          c.copy(appBuild = false)
+        }
+      )
     }
     parser.parse(rawArgs, Args()).getOrElse(sys.error("Arg parse error"))
   }

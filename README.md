@@ -54,10 +54,16 @@ prune generate-site-files
 prune push-site
 ```
 
-Finally, you can get a quick report of test results and remaining tests to run.
+You can get a quick report of test results in the database and any results that are still waiting on tests to run.
 
 ```
 prune print-report
+```
+
+Finally, you can run a Prune test manually on your local Play code.
+
+```
+prune wrk /my/projects/play /my/projects/apps scala-simple
 ```
 
 ## How Prune works
@@ -279,4 +285,26 @@ Examples:
 
   ```
   prune push-site
+  ```
+
+### wrk
+
+This command runs a wrk performance test against your local code and prints out the results. The results are *not* recorded in the database.
+
+* Build the local Play instance and the local app needed for the scala-simple test (scala-benchmark) then run the scala-simple test and print out the results.
+
+  ```
+  prune wrk /my/projects/play /my/projects/apps scala-simple
+  ```
+
+* Build the local Play instance and the local app called my-app inside the apps dir. Start up the local app and run wrk against the path */mycontroller*. Note: `<server.url>` must be typed in exactly as shown. Prune will replace the string `<server.url>` with the base URL of the server that it starts.
+
+  ```
+  prune wrk /my/projects/play /my/projects/apps my-app '<server.url>/mycontroller'
+  ```
+
+* Run the scala-simple test and print out the results without rebuilding Play or the app.
+
+  ```
+  prune wrk /my/projects/play /my/projects/apps scala-simple --skip-play-build --skip-app-build
   ```

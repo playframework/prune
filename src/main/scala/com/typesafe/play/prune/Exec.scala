@@ -35,7 +35,7 @@ object Exec {
         "assets.home" -> ctx.assetsHome,
         "prune.home" -> ctx.pruneHome,
         "play.home" -> ctx.playHome,
-        "tests.home" -> ctx.appsHome,
+        "apps.home" -> ctx.appsHome,
         "java8.home" -> ctx.java8Home,
         "ivy.home" -> ctx.ivyHome,
         "server.url" -> "http://localhost:9000"

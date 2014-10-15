@@ -59,15 +59,27 @@ object JsonReport {
       val flatCommitResults: Iterator[(Commit, TestName, TestResult)] = DB.iterator.flatMap { join =>
         if (join.pruneInstanceId == ctx.pruneInstanceId &&
           commitSet.contains(join.playBuildRecord.playCommit)) {
-          val optWrkResult: Option[WrkResult] = join.testRunRecord.wrkExecutions.last.stdout.flatMap(Results.parseWrkOutput)
+          val optStdout: Option[String] = join.testRunRecord.wrkExecutions.last.stdout
+          val optWrkResult: Option[WrkResult] =
+            optStdout.flatMap { stdoutString =>
+              Results.parseWrkOutput(stdoutString).fold(
+                error => None,
+                result => Some(result)
+              )
+            }
           optWrkResult.fold[Iterator[(Commit, TestName, TestResult)]](Iterator.empty) { wr =>
-            val testResult = TestResult(
-              testRunId = join.testRunId,
-              requestsPerSecond = wr.requests.toDouble / wr.duration.toDouble * 1000000,
-              latencyMean = wr.latency.mean / 1000,
-              latency95 = wr.latency.percentiles(95).toDouble / 1000
+            wr.summary.fold(
+              _ => Iterator.empty,
+              summary => {
+                val testResult = TestResult(
+                  testRunId = join.testRunId,
+                  requestsPerSecond = summary.requestsPerSecond,
+                  latencyMean = summary.latencyMean,
+                  latency95 = summary.latency95
+                )
+                Iterator((join.playBuildRecord.playCommit, join.testRunRecord.testName, testResult))
+              }
             )
-            Iterator((join.playBuildRecord.playCommit, join.testRunRecord.testName, testResult))
           }
         } else Iterator.empty
       }
