@@ -110,21 +110,33 @@ object Prune {
     pull0("apps source code", ctx.args.appsFetch, ctx.appsRemote, ctx.appsBranches, None, ctx.appsHome)
   }
 
-  private def playCommitsToTest(playTestConfig: PlayTestsConfig)(implicit ctx: Context): Seq[String] =
-    PruneGit.gitFirstParentsLog(
+  private def playCommitsToTest(playTestConfig: PlayTestsConfig)(implicit ctx: Context): Seq[String] = {
+    val commitsInLog = PruneGit.gitFirstParentsLog(
       ctx.playHome,
       playTestConfig.playBranch,
       playTestConfig.playRevisionRange._1,
       playTestConfig.playRevisionRange._2)
 
+    // Use randomness of hashes to do random sampling. Using hashes for sampling is
+    // better than using a random number because it makes sampling stable across
+    // multiple runs of Prune. It also means that changing the sampling value
+    // will still make use of any commits that have already been sampled.
+    val maxPrefix = (1 << (7 * 4)) - 1 // fffffff or 268435455
+    val samplePrefixCeiling = Math.round(maxPrefix * playTestConfig.playRevisionSampling).toInt
+    commitsInLog.filter { commit =>
+      val commitPrefix = java.lang.Integer.parseInt(commit.substring(0, 7), 16)
+      commitPrefix <= samplePrefixCeiling
+    }
+  }
+
+  private def filterBySeq[A,B](input: Seq[A], filters: Seq[B], extract: A => B): Seq[A] = {
+    if (filters.isEmpty) input else input.filter(a => filters.contains(extract(a)))
+  }
+
   def test(implicit ctx: Context): Unit = {
     
     val deadline: Option[DateTime] = ctx.args.maxTotalMinutes.map { mins =>
       DateTime.now.plusMinutes(mins)
-    }
-
-    def filterBySeq[A,B](input: Seq[A], filters: Seq[B], extract: A => B): Seq[A] = {
-      if (filters.isEmpty) input else input.filter(a => filters.contains(extract(a)))
     }
 
     val filteredPlayTests = filterBySeq(ctx.playTests, ctx.args.playBranches, (_: PlayTestsConfig).playBranch)
@@ -225,12 +237,12 @@ object Prune {
     }
 
     for {
-      playTestConfig <- ctx.playTests
-      testName <- playTestConfig.testNames
+      playTestConfig <- filterBySeq(ctx.playTests, ctx.args.playBranches, (_: PlayTestsConfig).playBranch)
+      testName <- filterBySeq(playTestConfig.testNames, ctx.args.testNames, identity[String])
     } {
       val playCommits: Seq[String] = playCommitsToTest(playTestConfig)
       val resultMap = getResults(playCommits, testName)
-      println(s"Test $testName on ${playTestConfig.playBranch}")
+      println(s"=== Test $testName on ${playTestConfig.playBranch} - ${playCommits.size} commits ===")
       for (playCommit <- playCommits) {
         val testResult: Either[String, TestResult] = resultMap.get(playCommit).toRight("<no result for commit>")
         val wrkOutput: Either[String, String] = testResult.right.flatMap(_.wrkOutput.toRight("<no wrk stdout for test run>"))

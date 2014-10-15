@@ -34,6 +34,8 @@ case class Context(
 
   val playTests: Seq[PlayTestsConfig] = {
     asScalaBuffer(config.getConfigList("playTests")).map { c: Config =>
+      val sampling = c.getDouble("playRevisionSampling")
+      assert(sampling >= 0 && sampling <= 1.0)
       PlayTestsConfig(
         playBranch = c.getString("playBranch"),
         playRevisionRange = {
@@ -43,6 +45,7 @@ case class Context(
           }
           (split(0), split(1))
         },
+        playRevisionSampling = sampling,
         appsBranch = c.getString("appsBranch"),
         appsRevision = c.getString("appsRevision"),
         testNames = asScalaBuffer(c.getStringList("testNames"))
@@ -148,7 +151,14 @@ object Args {
       } text("Push test results to remote database repository")
       cmd("print-report") action { (_, c) =>
         c.copy(command = Some(PrintReport))
-      } text("Output a simple report of test results")
+      } text("Output a simple report of test results") children(
+        opt[String]("play-branch") optional() unbounded() action { (s, c) =>
+          c.copy(playBranches = c.playBranches :+ s)
+        },
+        opt[String]("test-name") optional() unbounded() action { (s, c) =>
+          c.copy(testNames = c.testNames :+ s)
+        }
+      )
       cmd("generate-json-report") action { (_, c) =>
         c.copy(command = Some(GenerateJsonReport))
       } text("Generate a report of test results to a JSON file") children(
@@ -190,6 +200,7 @@ object Args {
 case class PlayTestsConfig(
   playBranch: String,
   playRevisionRange: (String, String),
+  playRevisionSampling: Double,
   appsBranch: String,
   appsRevision: String,
   testNames: Seq[String]
