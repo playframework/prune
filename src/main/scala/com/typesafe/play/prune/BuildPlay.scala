@@ -69,6 +69,11 @@ object BuildPlay {
   }
 
   def buildPlayDirectly()(implicit ctx: Context): Seq[Execution] = {
+
+    // While we're building there won't be a current Play build for this app
+    val oldPersistentState: PrunePersistentState = PrunePersistentState.readOrElse
+    PrunePersistentState.write(oldPersistentState.copy(lastPlayBuild = None))
+
     // Clear target directories and local Ivy repository to ensure an isolated build
     Seq(
       localIvyRepository,

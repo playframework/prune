@@ -77,6 +77,10 @@ object BuildApp {
 
   def buildAppDirectly(appName: String)(implicit ctx: Context): Seq[Execution] = {
 
+    // While we're building there won't be a current build for this app
+    val oldPersistentState = PrunePersistentState.readOrElse
+    PrunePersistentState.write(oldPersistentState.copy(lastAppBuilds = oldPersistentState.lastAppBuilds - appName))
+
     // Clear local target directory to ensure an isolated build
     val targetDir = Paths.get(ctx.appsHome, appName, "target")
     if (Files.exists(targetDir)) {
