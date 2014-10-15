@@ -91,7 +91,7 @@ object BuildApp {
       Command(
         "sbt",
         Seq("-Dsbt.ivy.home=<ivy.home>", "stage"),
-        workingDir = s"<apps.dir>/$appName",
+        workingDir = s"<apps.home>/$appName",
         env = Map(
           "JAVA_HOME" -> "<java8.home>",
           "LANG" -> "en_US.UTF-8"
