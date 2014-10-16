@@ -117,15 +117,20 @@ object Prune {
       playTestConfig.playRevisionRange._1,
       playTestConfig.playRevisionRange._2)
 
-    // Use randomness of hashes to do random sampling. Using hashes for sampling is
-    // better than using a random number because it makes sampling stable across
-    // multiple runs of Prune. It also means that changing the sampling value
-    // will still make use of any commits that have already been sampled.
-    val maxPrefix = (1 << (7 * 4)) - 1 // fffffff or 268435455
-    val samplePrefixCeiling = Math.round(maxPrefix * playTestConfig.playRevisionSampling).toInt
-    commitsInLog.filter { commit =>
-      val commitPrefix = java.lang.Integer.parseInt(commit.substring(0, 7), 16)
-      commitPrefix <= samplePrefixCeiling
+    if (commitsInLog.length <= 1) commitsInLog else {
+      // Use randomness of hashes to do random sampling. Using hashes for sampling is
+      // better than using a random number because it makes sampling stable across
+      // multiple runs of Prune. It also means that changing the sampling value
+      // will still make use of any commits that have already been sampled.
+      val maxPrefix = (1 << (7 * 4)) - 1 // fffffff or 268435455
+      val samplePrefixCeiling = Math.round(maxPrefix * playTestConfig.playRevisionSampling).toInt
+      val filteredPart: Seq[String] = commitsInLog.init.filter { commit =>
+        val commitPrefix = java.lang.Integer.parseInt(commit.substring(0, 7), 16)
+        commitPrefix <= samplePrefixCeiling
+      }
+      // Force the last commit onto the list so we can see the start point of the sampling
+      val unfilteredPart: String = commitsInLog.last
+      filteredPart :+ unfilteredPart
     }
   }
 
