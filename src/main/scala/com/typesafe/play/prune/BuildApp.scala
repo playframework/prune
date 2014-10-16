@@ -38,12 +38,14 @@ object BuildApp {
       differentPlayBuild ++ differentCommit ++ differentJavaVersion ++ missingTestBinary
     }
 
+    val description = s"$appName for Play ${playCommit.substring(0, 7)} [$playBranch]"
+
     if (reasonsToBuild.isEmpty) {
-      println(s"App $appName already built: ${lastAppBuildId.get}")
+      println(s"App $description already built: ${lastAppBuildId.get}")
       lastAppBuildRecord.get
     } else {
       val newAppBuildId = UUID.randomUUID()
-      println(s"Starting build for app $appName $newAppBuildId: "+(reasonsToBuild.mkString(", ")))
+      println(s"Starting build for app $description $newAppBuildId: "+(reasonsToBuild.mkString(", ")))
 
       gitCheckout(
         localDir = ctx.appsHome,

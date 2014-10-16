@@ -307,10 +307,6 @@ object Prune {
       BuildApp.buildAppDirectly(appName)
     }
     val testExecutions = RunTest.runTestDirectly(appName, wrkArgs)
-    val eitherStdout: Either[String, String] = testExecutions.wrkExecutions.last.stdout.toRight("No stdout from wrk")
-    val wrkResult: Either[String, WrkResult] = eitherStdout.right.flatMap(Results.parseWrkOutput)
-    val message: String = wrkResult.right.flatMap(_.summary.right.map(_.display)).merge
-    println(message)
   }
 
 }

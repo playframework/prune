@@ -37,12 +37,14 @@ object BuildPlay {
       differentCommit ++ differentJavaVersion ++ emptyIvyDirectory
     }
 
+    val description = s"${playCommit.substring(0, 7)} [$playBranch]"
+
     if (reasonsToBuild.isEmpty) {
-      println(s"Play already built: ${lastPlayBuildId.get}")
+      println(s"Play $description already built: ${lastPlayBuildId.get}")
       lastPlayBuildRecord.get
     } else {
       val newPlayBuildId = UUID.randomUUID()
-      println(s"Starting new Play build $newPlayBuildId: "+(reasonsToBuild.mkString(", ")))
+      println(s"Starting new Play $description build $newPlayBuildId: "+(reasonsToBuild.mkString(", ")))
 
       gitCheckout(
         localDir = ctx.playHome,

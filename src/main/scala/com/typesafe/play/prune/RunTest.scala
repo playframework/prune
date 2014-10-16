@@ -12,7 +12,8 @@ import Exec._
 object RunTest {
 
   def runTestTask(testTask: TestTask)(implicit ctx: Context): Unit = {
-    import testTask.info.{ appName, testName }
+    import testTask.playBranch
+    import testTask.info.{ appName, testName, playCommit }
     BuildApp.buildApp(
       playBranch = testTask.playBranch,
       playCommit = testTask.info.playCommit,
@@ -26,7 +27,7 @@ object RunTest {
     val testConfig = ctx.testConfig.get(testName).getOrElse(sys.error(s"No test config for test $testName"))
 
     val testRunId = UUID.randomUUID()
-    println(s"Starting test ${testName} run $testRunId")
+    println(s"Running test ${testName} on app $appName for Play ${playCommit.substring(0, 7)} [$playBranch] run: $testRunId")
     val testExecutions = runTestDirectly(appName, testConfig.wrkArgs)
 
     val testRunRecord = TestRunRecord(
@@ -150,11 +151,18 @@ object RunTest {
       )
     }
 
-    withServer[TestExecutions] {
+    val testExecutions = withServer[TestExecutions] {
       val warmupExecution: Execution = runWrk("warmupTime")
       val testExecution: Execution = runWrk("testTime")
       (serverExecution: Execution) => TestExecutions(serverExecution, Seq(warmupExecution, testExecution))
     }
+
+    val eitherStdout: Either[String, String] = testExecutions.wrkExecutions.last.stdout.toRight("No stdout from wrk")
+    val wrkResult: Either[String, WrkResult] = eitherStdout.right.flatMap(Results.parseWrkOutput)
+    val message: String = wrkResult.right.flatMap(_.summary.right.map(_.display)).merge
+    println(message)
+    testExecutions
+
   }
 
 }
