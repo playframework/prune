@@ -46,10 +46,11 @@ object RunTest {
 
     def withServer[A](body: => (Execution => A)): A = {
       val stageDirRelativePath = "target/universal/stage"
-      val pidFile: Path = Paths.get(ctx.appsHome, stageDirRelativePath, "RUNNING_PID")
+      val pidFile: Path = Paths.get(ctx.appsHome, appName, stageDirRelativePath, "RUNNING_PID")
 
+      println(pidFile)
       if (Files.exists(pidFile)) {
-        sys.error(s"Can't run test app ${} because $pidFile already exists")
+        sys.error(s"Can't run test app ${appName} because $pidFile already exists")
       }
 
       def canConnectTo(host: String, port: Int, timeout: Int): Boolean = {
@@ -79,33 +80,47 @@ object RunTest {
         sys.error("Can't start server: port already in use")
       }
 
-      val terminateServer: () => Execution = runAsync(
-        Command(
-          s"bin/${appName}",
-          args = Seq(),
-          workingDir = s"<apps.home>/${appName}/$stageDirRelativePath",
-          env = Map(
-            "JAVA_HOME" -> "<java8.home>",
-            "JAVA_OPTS" -> ctx.config.getString("java8.opts")
-          )
-        ),
-        Capture,
-        errorOnNonZeroExit = false
-      )
-      var terminated = false // Mark termination so we can terminate in finally clause if there's an error
+      val terminateServer: () => Execution = {
+        val directTerminate: () => Execution = runAsync(
+          Command(
+            s"bin/${appName}",
+            args = Seq(),
+            workingDir = s"<apps.home>/${appName}/$stageDirRelativePath",
+            env = Map(
+              "JAVA_HOME" -> "<java8.home>",
+              "JAVA_OPTS" -> ctx.config.getString("java8.opts")
+            )
+          ),
+          Capture,
+          errorOnNonZeroExit = false
+        )
+
+        @volatile
+        var terminatedExecution: Option[Execution] = None
+        val guardedTerminate: () => Execution = { () =>
+          terminatedExecution.getOrElse {
+            val e = directTerminate()
+            terminatedExecution = Some(e)
+            e
+          }
+        }
+
+        guardedTerminate
+      }
       try {
 
         val serverStarted = pollFor(max = 10000, interval = 50) { canConnectTo("localhost", 9000, timeout = 50) }
         if (!serverStarted) {
+          val e: Execution = terminateServer()
+          println(s"Server execution: $e")
           sys.error("Server didn't start, aborting test")
         }
 
         val f = body
-        terminated = true
         val serverExecution = terminateServer()
         f(serverExecution)
       } finally {
-        if (!terminated) terminateServer()
+        terminateServer()
       }
     }
 
