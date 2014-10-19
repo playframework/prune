@@ -171,7 +171,7 @@ object Prune {
           )
         }
       }
-    }.sortBy(_.appsCommit).sortBy(_.info.playCommit)
+    }.distinct.sortBy(_.appsCommit).sortBy(_.info.playCommit)
 
     val completedTaskInfos: Seq[TestTaskInfo] = DB.iterator.map { join =>
           TestTaskInfo(
