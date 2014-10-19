@@ -49,7 +49,6 @@ object RunTest {
       val stageDirRelativePath = "target/universal/stage"
       val pidFile: Path = Paths.get(ctx.appsHome, appName, stageDirRelativePath, "RUNNING_PID")
 
-      println(pidFile)
       if (Files.exists(pidFile)) {
         sys.error(s"Can't run test app ${appName} because $pidFile already exists")
       }
