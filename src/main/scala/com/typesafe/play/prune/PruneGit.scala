@@ -8,6 +8,7 @@ import java.util.{ List => JList }
 import org.apache.commons.io.FileUtils
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib._
+import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.transport.{RemoteConfig, RefSpec}
 import org.joda.time.{ReadableInstant, DateTime}
@@ -137,23 +138,9 @@ object PruneGit {
 
   }
 
-  case class LogEntry(id: String, parentCount: Int, shortMessage: String)
+  case class LogEntry(id: String, time: DateTime)
 
-  def gitLog(localDir: String, branch: String, startRev: String, endRev: String): Seq[LogEntry] = {
-    withRepository(localDir) { repository =>
-      val startId = resolveId(localDir, branch, startRev)
-      val endId = resolveId(localDir, branch, endRev)
-      // println(s"Logging from $startId to $endId")
-      val result = new Git(repository).log().addRange(startId, endId).call()
-      val logEntries: Iterable[LogEntry] = iterableAsScalaIterable(result).map { revCommit =>
-        //println(revCommit.getId.getName)
-        LogEntry(revCommit.getId.name, revCommit.getParentCount, revCommit.getShortMessage)
-      }
-      logEntries.to[Seq]
-    }
-  }
-
-  def gitFirstParentsLog(localDir: String, branch: String, startRev: String, endRev: String): Seq[String] = {
+  def gitFirstParentsLog(localDir: String, branch: String, startRev: String, endRev: String): Seq[LogEntry] = {
     withRepository(localDir) { repository =>
       val startId: AnyObjectId = resolveId(localDir, branch, startRev)
       val endId: AnyObjectId = resolveId(localDir, branch, endRev)
@@ -163,13 +150,14 @@ object PruneGit {
       val iterator = logWalk.iterator()
 
       @scala.annotation.tailrec
-      def walkBackwards(results: Seq[String], next: AnyObjectId): Seq[String] = {
+      def walkBackwards(results: Seq[LogEntry], next: AnyObjectId): Seq[LogEntry] = {
         if (iterator.hasNext) {
           val commit = iterator.next()
           val current = commit.getId
           if (current == next) {
             // Stop walking because we've gone back before the end time
-            walkBackwards(results :+ next.name, commit.getParent(0).getId)
+            val entry: LogEntry = LogEntry(next.name, new DateTime(commit.getCommitTime.toLong * 1000))
+            walkBackwards(results :+ entry, commit.getParent(0).getId)
           } else {
             // Skip this commit because its not the next commit that we're scanning for
             walkBackwards(results, next)
@@ -179,7 +167,7 @@ object PruneGit {
       walkBackwards(Seq.empty, endId)
     }
   }
-  def gitFirstParentsLogToDate(localDir: String, branch: String, lastRev: String, endTime: ReadableInstant): Seq[(String, DateTime)] = {
+  def gitFirstParentsLogToDate(localDir: String, branch: String, lastRev: String, endTime: ReadableInstant): Seq[LogEntry] = {
     withRepository(localDir) { repository =>
       val lastId: AnyObjectId = resolveId(localDir, branch, lastRev)
       val endTimeSeconds: Int = (endTime.getMillis / 1000).toInt
@@ -189,14 +177,14 @@ object PruneGit {
       val iterator = logWalk.iterator()
 
       @scala.annotation.tailrec
-      def walkBackwards(results: Seq[(String, DateTime)], next: AnyObjectId): Seq[(String, DateTime)] = {
+      def walkBackwards(results: Seq[LogEntry], next: AnyObjectId): Seq[LogEntry] = {
         if (iterator.hasNext) {
           val commit = iterator.next()
           val current = commit.getId
           if (current == next) {
             val commitTimeSeconds = commit.getCommitTime()
-            val commitTime = new DateTime(commitTimeSeconds.toLong * 1000)
-            val newResults: Seq[(String, DateTime)] = results :+(next.name, commitTime)
+            val entry: LogEntry = LogEntry(next.name, new DateTime(commitTimeSeconds.toLong * 1000))
+            val newResults: Seq[LogEntry] = results :+ entry
             if (commitTimeSeconds < endTimeSeconds) {
               // Stop walking because we've gone past the end time that we're interested in
               newResults

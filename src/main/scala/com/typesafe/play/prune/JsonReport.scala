@@ -7,6 +7,7 @@ import java.nio.file.{Paths, Files}
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+import com.typesafe.play.prune.PruneGit.LogEntry
 import org.joda.time.DateTime
 
 import scala.collection.convert.WrapAsScala._
@@ -21,6 +22,8 @@ object JsonReport {
 
     type BranchName = String
     type Commit = String
+
+    // TODO: Use PruneGit.LogEntry type instead
     case class CommitInfo(
                            commit: Commit,
                            time: DateTime
@@ -44,8 +47,8 @@ object JsonReport {
     val branches: Map[BranchName, Seq[CommitInfo]] = {
       val branchNames: Seq[BranchName] = asScalaBuffer(ctx.config.getStringList("jsonReport.playBranches"))
       branchNames.map { branch =>
-        val commits: Seq[(Commit, DateTime)] = PruneGit.gitFirstParentsLogToDate(ctx.playHome, branch, "HEAD", startTime)
-        val commitInfos: Seq[CommitInfo] = commits.map { case (commit, time) => CommitInfo(commit, time)}
+        val commits: Seq[LogEntry] = PruneGit.gitFirstParentsLogToDate(ctx.playHome, branch, "HEAD", startTime)
+        val commitInfos: Seq[CommitInfo] = commits.map(le => CommitInfo(le.id, le.time))
         (branch, commitInfos)
       }.toMap
     }

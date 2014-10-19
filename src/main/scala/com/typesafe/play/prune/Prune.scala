@@ -6,12 +6,14 @@ package com.typesafe.play.prune
 import com.typesafe.config.{ Config, ConfigFactory }
 import java.nio.file._
 import java.util.UUID
+import com.typesafe.play.prune.PruneGit.LogEntry
 import org.eclipse.jgit.lib._
 import org.joda.time.{Duration, DateTime}
 import scala.annotation.tailrec
 
 case class TestTask(
   info: TestTaskInfo,
+  playCommitTime: DateTime,
   playBranch: String,
   appsBranch: String,
   appsCommit: String
@@ -110,7 +112,7 @@ object Prune {
     pull0("apps source code", ctx.args.appsFetch, ctx.appsRemote, ctx.appsBranches, None, ctx.appsHome)
   }
 
-  private def playCommitsToTest(playTestConfig: PlayTestsConfig)(implicit ctx: Context): Seq[String] = {
+  private def playCommitsToTest(playTestConfig: PlayTestsConfig)(implicit ctx: Context): Seq[LogEntry] = {
     val commitsInLog = PruneGit.gitFirstParentsLog(
       ctx.playHome,
       playTestConfig.playBranch,
@@ -124,12 +126,12 @@ object Prune {
       // will still make use of any commits that have already been sampled.
       val maxPrefix = (1 << (7 * 4)) - 1 // fffffff or 268435455
       val samplePrefixCeiling = Math.round(maxPrefix * playTestConfig.playRevisionSampling).toInt
-      val filteredPart: Seq[String] = commitsInLog.init.filter { commit =>
-        val commitPrefix = java.lang.Integer.parseInt(commit.substring(0, 7), 16)
+      val filteredPart: Seq[LogEntry] = commitsInLog.init.filter { commit =>
+        val commitPrefix = java.lang.Integer.parseInt(commit.id.substring(0, 7), 16)
         commitPrefix <= samplePrefixCeiling
       }
       // Force the last commit onto the list so we can see the start point of the sampling
-      val unfilteredPart: String = commitsInLog.last
+      val unfilteredPart: LogEntry = commitsInLog.last
       filteredPart :+ unfilteredPart
     }
   }
@@ -149,27 +151,27 @@ object Prune {
       //println(s"Working out tests to run for $playTest")
 
       val appsId: AnyObjectId = PruneGit.resolveId(ctx.appsHome, playTest.appsBranch, playTest.appsRevision)
-      val playCommits: Seq[String] = playCommitsToTest(playTest)
+      val playCommits: Seq[LogEntry] = playCommitsToTest(playTest)
       val playCommitFilter: Seq[String] = ctx.args.playRevs.map(r => PruneGit.resolveId(ctx.playHome, playTest.playBranch, r).name)
-      val filteredPlayCommits: Seq[String] = filterBySeq(playCommits, playCommitFilter, identity[String])
-      filteredPlayCommits.flatMap { playCommit =>
+      val filteredPlayCommits: Seq[LogEntry] = filterBySeq(playCommits, playCommitFilter, (_: LogEntry).id)
+        filteredPlayCommits.flatMap { playCommit =>
         val filteredTestNames = filterBySeq(playTest.testNames, ctx.args.testNames, identity[String])
         filteredTestNames.map { testName =>
           val testApp = ctx.testConfig.get(testName).map(_.app).getOrElse(sys.error(s"No test config for $testName"))
           TestTask(
             info = TestTaskInfo(
               testName = testName,
-              playCommit = playCommit,
+              playCommit = playCommit.id,
               appName = testApp
             ),
+            playCommitTime = playCommit.time,
             playBranch = playTest.playBranch,
             appsBranch = playTest.appsBranch,
             appsCommit = appsId.getName
           )
         }
       }
-    }
-    val neededPlayCommitCount: Int = neededTasks.map(_.info.playCommit).distinct.size
+    }.sortBy(_.appsCommit).sortBy(_.info.playCommit)
 
     val completedTaskInfos: Seq[TestTaskInfo] = DB.iterator.map { join =>
           TestTaskInfo(
@@ -178,20 +180,12 @@ object Prune {
             appName = join.appBuildRecord.appName
           )
     }.toSeq
-    val completedPlayCommitCount: Int = completedTaskInfos.map(_.playCommit).distinct.size
-
     val tasksToRun: Seq[TestTask] = neededTasks.filter(task => !completedTaskInfos.contains(task.info))
-    val playCommitsToRunCount: Int = tasksToRun.map(_.info.playCommit).distinct.size
 
-    println(s"Prune tests already executed: ${completedPlayCommitCount} Play revisions, ${completedTaskInfos.size} test runs")
-    println(s"Prune tests needed: ${neededPlayCommitCount} Play revisions, ${neededTasks.size} test runs")
-    println(s"Prune tests remaining: ${playCommitsToRunCount} Play revisions, ${tasksToRun.size} test runs")
+    println(s"Prune tests already executed: ${completedTaskInfos.map(_.playCommit).distinct.size} Play revisions, ${completedTaskInfos.size} test runs")
+    println(s"Prune tests needed: ${neededTasks.map(_.info.playCommit).distinct.size} Play revisions, ${neededTasks.size} test runs")
+    println(s"Prune tests remaining: ${tasksToRun.map(_.info.playCommit).distinct.size} Play revisions, ${tasksToRun.size} test runs")
 
-//    type TestFilter = Seq[TestTask] => Seq[TestTask]
-//
-//    val filters: Seq[Seq[TestTask] => Seq[TestTask]] =
-//      ctx.args.maxTestRuns.map(i => ((s: Seq[TestTask]) => s.take(i))).toSeq ++
-//      ctx.args.playRev.map(r => ((s: Seq[TestTask]) => s.filter(_.playCommit.startsWith(r))).toSeq ++
 
     val truncatedTasksToRun = ctx.args.maxTestRuns.fold(tasksToRun) { i =>
       if (tasksToRun.size > i) {
@@ -227,7 +221,7 @@ object Prune {
                            wrkOutput: Option[String]
                            )
 
-    def getResults(playCommits: Seq[PlayRev], testName: String): Map[PlayRev, TestResult] = {
+    def getResults(playCommits: Seq[String], testName: String): Map[PlayRev, TestResult] = {
       DB.iterator.flatMap { join =>
         if (
           join.pruneInstanceId == ctx.pruneInstanceId &&
@@ -245,7 +239,7 @@ object Prune {
       playTestConfig <- filterBySeq(ctx.playTests, ctx.args.playBranches, (_: PlayTestsConfig).playBranch)
       testName <- filterBySeq(playTestConfig.testNames, ctx.args.testNames, identity[String])
     } {
-      val playCommits: Seq[String] = playCommitsToTest(playTestConfig)
+      val playCommits: Seq[String] = playCommitsToTest(playTestConfig).map(_.id)
       val resultMap = getResults(playCommits, testName)
       println(s"=== Test $testName on ${playTestConfig.playBranch} - ${playCommits.size} commits ===")
       for (playCommit <- playCommits) {
