@@ -9,6 +9,8 @@ import java.util.concurrent.TimeUnit
 
 import Exec._
 
+import scala.util.Try
+
 object RunTest {
 
   def runTestTask(testTask: TestTask)(implicit ctx: Context): Unit = {
@@ -45,7 +47,7 @@ object RunTest {
 
   def runTestDirectly(appName: String, wrkArgs: Seq[String])(implicit ctx: Context): TestExecutions = {
 
-    def withServer[A](body: => (Execution => A)): A = {
+    def withServer[A](body: => (Try[Execution] => A)): A = {
       val stageDirRelativePath = "target/universal/stage"
       val pidFile: Path = Paths.get(ctx.appsHome, appName, stageDirRelativePath, "RUNNING_PID")
 
@@ -80,38 +82,25 @@ object RunTest {
         sys.error("Can't start server: port already in use")
       }
 
-      val terminateServer: () => Execution = {
-        val directTerminate: () => Execution = runAsync(
-          Command(
-            s"bin/${appName}",
-            args = Seq(),
-            workingDir = s"<apps.home>/${appName}/$stageDirRelativePath",
-            env = Map(
-              "JAVA_HOME" -> "<java8.home>",
-              "JAVA_OPTS" -> ctx.config.getString("java8.opts")
-            )
-          ),
-          Capture,
-          errorOnNonZeroExit = false
-        )
+      val terminateServer: () => Try[Execution] = runAsync(
+        Command(
+          s"bin/${appName}",
+          args = Seq(),
+          workingDir = s"<apps.home>/${appName}/$stageDirRelativePath",
+          env = Map(
+            "JAVA_HOME" -> "<java8.home>",
+            "JAVA_OPTS" -> ctx.config.getString("java8.opts")
+          )
+        ),
+        Capture,
+        errorOnNonZeroExit = false
+      )
 
-        @volatile
-        var terminatedExecution: Option[Execution] = None
-        val guardedTerminate: () => Execution = { () =>
-          terminatedExecution.getOrElse {
-            val e = directTerminate()
-            terminatedExecution = Some(e)
-            e
-          }
-        }
-
-        guardedTerminate
-      }
       try {
 
         val serverStarted = pollFor(max = 10000, interval = 50) { canConnectTo("localhost", 9000, timeout = 50) }
         if (!serverStarted) {
-          val e: Execution = terminateServer()
+          val e: Try[Execution] = terminateServer()
           println(s"Server execution: $e")
           sys.error("Server didn't start, aborting test")
         }
@@ -153,7 +142,7 @@ object RunTest {
     val testExecutions = withServer[TestExecutions] {
       val warmupExecution: Execution = runWrk("warmupTime")
       val testExecution: Execution = runWrk("testTime")
-      (serverExecution: Execution) => TestExecutions(serverExecution, Seq(warmupExecution, testExecution))
+      (serverExecution: Try[Execution]) => TestExecutions(serverExecution.get, Seq(warmupExecution, testExecution))
     }
 
     val eitherStdout: Either[String, String] = testExecutions.wrkExecutions.last.stdout.toRight("No stdout from wrk")

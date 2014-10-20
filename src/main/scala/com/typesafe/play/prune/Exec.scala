@@ -14,6 +14,7 @@ import scala.collection.JavaConversions
 import scala.concurrent._
 import scala.concurrent.duration.Duration
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.Try
 
 object Exec {
 
@@ -121,30 +122,40 @@ object Exec {
     command: Command,
     streamHandling: StreamHandling,
     errorOnNonZeroExit: Boolean = true,
-    timeout: Option[Long] = None)(implicit ctx: Context): () => Execution = {
+    timeout: Option[Long] = None)(implicit ctx: Context): () => Try[Execution] = {
     val prepared = prepare(command, streamHandling, timeout)
     import prepared._
     val resultHandler = new DefaultExecuteResultHandler()
     val startTime = DateTime.now
     executor.execute(commandLine, environment, resultHandler)
+
+    @volatile
+    var destroyResult: Option[Try[Execution]] = None
     () => {
-      watchdog.destroyProcess()
-      resultHandler.waitFor(10000)
-      val endTime = DateTime.now
-      val returnCode = if (resultHandler.hasResult) resultHandler.getExitValue else resultHandler.getException.getExitValue
-      val streamResult = streamResultGetter()
-      val execution = Execution(
-        command = command,
-        stdout = streamResult.map(_._1),
-        stderr = streamResult.map(_._2),
-        returnCode = Some(returnCode),
-        startTime = startTime,
-        endTime = endTime
-      )
-      if (errorOnNonZeroExit && execution.returnCode.fold(false)(_ != 0)) {
-        sys.error(s"Execution failed: $execution")
-      } else execution
-    }
+      destroyResult match {
+        case Some(e) => e
+        case None =>
+          val r = Try {
+            watchdog.destroyProcess()
+            resultHandler.waitFor(10000)
+            val endTime = DateTime.now
+            val returnCode = if (resultHandler.hasResult) resultHandler.getExitValue else resultHandler.getException.getExitValue
+            val streamResult = streamResultGetter()
+            val execution = Execution(
+              command = command,
+              stdout = streamResult.map(_._1),
+              stderr = streamResult.map(_._2),
+              returnCode = Some(returnCode),
+              startTime = startTime,
+              endTime = endTime
+            )
+            if (errorOnNonZeroExit && execution.returnCode.fold(false)(_ != 0)) {
+              sys.error(s"Execution failed: $execution")
+            } else execution
+          }
+          destroyResult = Some(r)
+          r
+      }
   }
 
   private[Exec] class CapturingStreamHandler extends ExecuteStreamHandler {
