@@ -156,6 +156,7 @@ object Exec {
           destroyResult = Some(r)
           r
       }
+    }
   }
 
   private[Exec] class CapturingStreamHandler extends ExecuteStreamHandler {
