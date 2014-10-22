@@ -133,6 +133,13 @@ Here is a template for a `~/.prune/prune.config` file. All keys are required.
 # to configure appropriate SSH keys in `~/.ssh`.
 #siteRemote: "https://github.com/playframework/prune.git"
 #siteBranch: gh-pages
+
+# The location of the YourKit agent used to collect profiling data.
+# YourKit can be downloaded from http://www.yourkit.com/download/.
+# For more information about the path to the YourKit agent, see
+# http://www.yourkit.com/docs/java/help/agent.jsp.
+#yourkit.agent: /local/yourkit/path/bin/linux-x86-64/libyjpagent.so
+#yourkit.agent: /local/yourkit/path/bin/mac/libyjpagent.jnilib
 ```
 
 ## Running Prune
@@ -304,6 +311,22 @@ This command runs a wrk performance test against your local code and prints out 
   ```
 
 * Run the scala-simple test and print out the results without rebuilding Play or the app.
+
+  ```
+  prune wrk /my/projects/play /my/projects/apps scala-simple --skip-play-build --skip-app-build
+  ```
+
+### profile
+
+This command runs a performance test against your local code while capturing data with the YourKit agent. The results are *not* recorded in the database. Results are saved in `~/.prune/yourkit` using a randomly generated UUID as the given session name. The UUID is printed out when the test runs so that you can locate the session files later.
+
+* Build the local Play instance and the local app needed for the scala-simple test (scala-benchmark) then run the scala-simple test and capture a YourKit snapshot.
+
+  ```
+  prune wrk /my/projects/play /my/projects/apps scala-simple
+  ```
+
+* Run the scala-simple test and capture a profiling snapshot without rebuilding Play or the app.
 
   ```
   prune wrk /my/projects/play /my/projects/apps scala-simple --skip-play-build --skip-app-build

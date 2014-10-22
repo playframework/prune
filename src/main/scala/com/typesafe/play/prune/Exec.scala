@@ -39,7 +39,9 @@ object Exec {
         "apps.home" -> ctx.appsHome,
         "java8.home" -> ctx.java8Home,
         "ivy.home" -> ctx.ivyHome,
-        "server.url" -> "http://localhost:9000"
+        "server.url" -> "http://localhost:9000",
+        "yourkit.agent" -> ctx.yourkitAgent,
+        "yourkit.home" -> ctx.yourkitHome
       )
       replacements.foldLeft(command) {
         case (c, (name, value)) => c.replace("<"+name+">", value)

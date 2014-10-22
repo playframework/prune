@@ -60,7 +60,15 @@ object Prune {
         |# remote repository and you want to push to that repository, be sure
         |# to configure appropriate SSH keys in `~/.ssh`.
         |#siteRemote: "https://github.com/playframework/prune.git"
-        |#siteBranch: gh-pages""".stripMargin)
+        |#siteBranch: gh-pages
+        |
+        |# The location of the YourKit agent used to collect profiling data.
+        |# YourKit can be downloaded from http://www.yourkit.com/download/.
+        |# For more information about the path to the YourKit agent, see
+        |# http://www.yourkit.com/docs/java/help/agent.jsp.
+        |#yourkit.agent: /local/yourkit/path/bin/linux-x86-64/libyjpagent.so
+        |#yourkit.agent: /local/yourkit/path/bin/mac/libyjpagent.jnilib
+        |""".stripMargin)
       System.exit(1)
     }
     if (Files.notExists(userConfigFile)) configError("Please create a Prune configuration file.")
@@ -68,7 +76,15 @@ object Prune {
     val userConfig: Config = ConfigFactory.parseFile(userConfigFile.toFile)
     val config = userConfig.withFallback(defaultConfig)
 
-    Seq("pruneInstanceId", "java8.home", "dbRemote", "dbBranch", "siteRemote", "siteBranch").foreach { path =>
+    val neededPaths = Seq(
+      "pruneInstanceId",
+      "java8.home",
+      "dbRemote",
+      "dbBranch",
+      "siteRemote",
+      "siteBranch",
+      "yourkit.agent")
+    neededPaths.foreach { path =>
       if (!config.hasPath(path)) configError(s"Missing setting `$path` from your Prune configuration file.")
     }
 
@@ -90,6 +106,7 @@ object Prune {
       case Some(GenerateSiteFiles) => generateSiteFiles
       case Some(PushSite) => pushSite
       case Some(Wrk) => wrk
+      case Some(Profile) => profile
     }
 
   }
@@ -301,6 +318,22 @@ object Prune {
       BuildApp.buildAppDirectly(appName)
     }
     val testExecutions = RunTest.runTestDirectly(appName, wrkArgs)
+  }
+
+  def profile(implicit ctx: Context): Unit = {
+    val testOrAppName: String = ctx.args.testOrAppName.get
+    val testConfig: Option[TestConfig] = ctx.testConfig.get(testOrAppName)
+    val appName = testConfig.fold(testOrAppName)(_.app)
+    val wrkArgs = testConfig.fold(Seq.empty[String])(_.wrkArgs) ++ ctx.args.wrkArgs
+    if (ctx.args.playBuild) {
+      BuildPlay.buildPlayDirectly()
+    }
+    if (ctx.args.appBuild) {
+      BuildApp.buildAppDirectly(appName)
+    }
+    val sessionName = UUID.randomUUID.toString
+    println(s"Using profile session name: $sessionName")
+    val testExecutions = RunTest.runProfileDirectly(appName, wrkArgs, sessionName)
   }
 
 }

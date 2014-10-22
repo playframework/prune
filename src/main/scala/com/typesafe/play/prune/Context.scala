@@ -13,7 +13,10 @@ case class Context(
 ) {
   val pruneInstanceId = UUID.fromString(config.getString("pruneInstanceId"))
   val pruneHome = config.getString("home")
+
   val java8Home = config.getString("java8.home")
+  val java8Opts: Seq[String] = asScalaBuffer(config.getStringList("java8.opts"))
+
   val ivyHome = config.getString("ivy.home")
 
   val playRemote = config.getString("playRemote")
@@ -72,6 +75,11 @@ case class Context(
       ))
     }
   }
+
+  val yourkitHome: String = config.getString("yourkit.home")
+  val yourkitAgent: String = config.getString("yourkit.agent")
+  val yourkitJavaOpts: Seq[String] = asScalaBuffer(config.getStringList("yourkit.javaOpts"))
+
 }
 
 sealed trait CommandArg
@@ -84,6 +92,7 @@ case object PullSite extends CommandArg
 case object GenerateSiteFiles extends CommandArg
 case object PushSite extends CommandArg
 case object Wrk extends CommandArg
+case object Profile extends CommandArg
 
 case class Args(
   command: Option[CommandArg] = None,
@@ -178,6 +187,23 @@ object Args {
       cmd("wrk") action { (_, c) =>
         c.copy(command = Some(Wrk))
       } text("Run wrk on your local Play code") children(
+        arg[String]("<play-home>") action { (s, c) => c.copy(playHome = Some(s)) } text("Play directory"),
+        arg[String]("<apps-home>") action { (s, c) => c.copy(appsHome = Some(s)) } text("App directory"),
+        arg[String]("<app-name>") action { (s, c) => c.copy(testOrAppName = Some(s)) } text("Test name or app name"),
+        arg[String]("[<wrk arg>...]") optional() unbounded() action { (s, c) => c.copy(wrkArgs = c.wrkArgs :+ s) } text("Wrk arguments"),
+        opt[Int]("max-wrk-duration") action { (i, c) =>
+          c.copy(maxWrkDuration = Some(i))
+        },
+        opt[Unit]("skip-play-build") action { (_, c) =>
+          c.copy(playBuild = false)
+        },
+        opt[Unit]("skip-app-build") action { (_, c) =>
+          c.copy(appBuild = false)
+        }
+      )
+      cmd("profile") action { (_, c) =>
+        c.copy(command = Some(Profile))
+      } text("Run profiling agent on your local Play code") children(
         arg[String]("<play-home>") action { (s, c) => c.copy(playHome = Some(s)) } text("Play directory"),
         arg[String]("<apps-home>") action { (s, c) => c.copy(appsHome = Some(s)) } text("App directory"),
         arg[String]("<app-name>") action { (s, c) => c.copy(testOrAppName = Some(s)) } text("Test name or app name"),
