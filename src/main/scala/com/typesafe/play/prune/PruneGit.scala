@@ -106,7 +106,8 @@ object PruneGit {
 
   def gitCheckout(localDir: String, branch: String, commit: String): Unit = {
     withRepository(localDir) { repository =>
-      val result = new Git(repository).checkout().setName(branch).setStartPoint(commit).call()
+      println(s"Checking out $commit")
+      val result = new Git(repository).checkout.setName(commit).call()
     }
   }
 
