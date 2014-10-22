@@ -16,36 +16,17 @@ object BuildApp {
     playCommit: String,
     appsBranch: String,
     appsCommit: String,
-    appName: String)(implicit ctx: Context): AppBuildRecord = {
-
-    BuildPlay.buildPlay(playBranch = playBranch, playCommit = playCommit)
-
-    val javaVersionExecution: Execution = JavaVersion.captureJavaVersion()
-
-    val lastPlayBuildId: UUID = PrunePersistentState.read.flatMap(_.lastPlayBuild).getOrElse {
-      sys.error("Play must be built before tests can be built")
-    }
-
-    val lastAppBuildId: Option[UUID] = PrunePersistentState.read.flatMap(_.lastAppBuilds.get(appName))
-    val lastAppBuildRecord: Option[AppBuildRecord] = lastAppBuildId.flatMap(AppBuildRecord.read)
-    val reasonsToBuild: Seq[String] = lastAppBuildRecord.fold(Seq("No existing app build record")) { buildRecord =>
-      val differentPlayBuild = if (buildRecord.playBuildId == lastPlayBuildId) Seq() else Seq("Play build has changed")
-      val differentCommit = if (buildRecord.appsCommit == appsCommit) Seq() else Seq("Apps commit has changed")
-      val differentJavaVersion = if (buildRecord.javaVersionExecution.stderr == javaVersionExecution.stderr) Seq() else Seq("Java version has changed")
-      val testBinary = Paths.get(ctx.appsHome, appName, "target/universal/stage/bin", appName)
-      val missingTestBinary = if (Files.exists(testBinary)) Seq() else Seq("App binary is missing")
-      // TODO: Check previous build commands are OK
-      differentPlayBuild ++ differentCommit ++ differentJavaVersion ++ missingTestBinary
-    }
+    appName: String)(implicit ctx: Context): Option[(UUID, AppBuildRecord)] = {
 
     val description = s"$appName for Play ${playCommit.substring(0, 7)} [$playBranch]"
 
-    if (reasonsToBuild.isEmpty) {
-      println(s"App $description already built: ${lastAppBuildId.get}")
-      lastAppBuildRecord.get
-    } else {
+    val (playBuildId, playBuildRecord) = BuildPlay.buildPlay(playBranch = playBranch, playCommit = playCommit)
+
+    val javaVersionExecution: Execution = JavaVersion.captureJavaVersion()
+
+    def newAppBuild(): (UUID, AppBuildRecord) = {
       val newAppBuildId = UUID.randomUUID()
-      println(s"Starting build for app $description $newAppBuildId: "+(reasonsToBuild.mkString(", ")))
+      println(s"Starting new app $description build: $newAppBuildId")
 
       gitCheckout(
         localDir = ctx.appsHome,
@@ -63,7 +44,7 @@ object BuildApp {
       val buildExecutions = buildAppDirectly(appName)
 
       val newAppBuildRecord = AppBuildRecord(
-        playBuildId = lastPlayBuildId,
+        playBuildId = playBuildId,
         appsCommit = appsCommit,
         appName = appName,
         javaVersionExecution = javaVersionExecution,
@@ -72,12 +53,43 @@ object BuildApp {
       AppBuildRecord.write(newAppBuildId, newAppBuildRecord)
       val oldPersistentState = PrunePersistentState.readOrElse
       PrunePersistentState.write(oldPersistentState.copy(lastAppBuilds = oldPersistentState.lastAppBuilds.updated(appName, newAppBuildId)))
-      newAppBuildRecord
+      (newAppBuildId, newAppBuildRecord)
     }
 
+    if (!playBuildRecord.successfulBuild) {
+      println(s"Play build $playBuildId was unsuccessful: skipping build of app $description")
+      None
+    } else {
+      val o: Option[(UUID, AppBuildRecord)] = for {
+        persistentState <- PrunePersistentState.read
+        lastAppBuildId <- persistentState.lastAppBuilds.get(appName)
+        lastAppBuildRecord <- AppBuildRecord.read(lastAppBuildId)
+      } yield {
+        val reasonsToBuild: Seq[String] = {
+          val differentPlayBuild = if (lastAppBuildRecord.playBuildId == playBuildId) Seq() else Seq("Play build has changed")
+          val differentCommit = if (lastAppBuildRecord.appsCommit == appsCommit) Seq() else Seq("Apps commit has changed")
+          val differentJavaVersion = if (lastAppBuildRecord.javaVersionExecution.stderr == javaVersionExecution.stderr) Seq() else Seq("Java version has changed")
+          val testBinary = Paths.get(ctx.appsHome, appName, "target/universal/stage/bin", appName)
+          val missingTestBinary = if (Files.exists(testBinary)) Seq() else Seq("App binary is missing")
+          // TODO: Check previous build commands are OK
+          differentPlayBuild ++ differentCommit ++ differentJavaVersion ++ missingTestBinary
+        }
+        if (reasonsToBuild.isEmpty) {
+          println(s"App $description already built: ${lastAppBuildId}")
+          (lastAppBuildId, lastAppBuildRecord)
+        } else {
+          println("Can't use existing app build: " + (reasonsToBuild.mkString(", ")))
+          newAppBuild()
+        }
+      }
+      o.orElse {
+        println(s"No existing build record for Play, skipping build of app $description")
+        Some(newAppBuild())
+      }
+    }
   }
 
-  def buildAppDirectly(appName: String)(implicit ctx: Context): Seq[Execution] = {
+  def buildAppDirectly(appName: String, errorOnNonZeroExit: Boolean = false)(implicit ctx: Context): Seq[Execution] = {
 
     // While we're building there won't be a current build for this app
     val oldPersistentState = PrunePersistentState.readOrElse
@@ -101,7 +113,7 @@ object BuildApp {
       )
     )
 
-    buildCommands.map(run(_, Pump))
+    buildCommands.map(run(_, Pump, errorOnNonZeroExit = errorOnNonZeroExit))
   }
 
 }

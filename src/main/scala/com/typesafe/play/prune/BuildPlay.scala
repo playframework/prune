@@ -23,35 +23,22 @@ import Exec._
 import PruneGit._
 
 object BuildPlay {
-  def buildPlay(playBranch: String, playCommit: String)(implicit ctx: Context): PlayBuildRecord = {
-
-    val javaVersionExecution: Execution = JavaVersion.captureJavaVersion()
-
-    val lastPlayBuildId: Option[UUID] = PrunePersistentState.read.flatMap(_.lastPlayBuild)
-    val lastPlayBuildRecord: Option[PlayBuildRecord] = lastPlayBuildId.flatMap(PlayBuildRecord.read)
-    val reasonsToBuild: Seq[String] = lastPlayBuildRecord.fold(Seq("No existing build record")) { buildRecord =>
-      val differentCommit = if (buildRecord.playCommit == playCommit) Seq() else Seq(s"Play commit has changed to ${playCommit.substring(0,7)}")
-      val differentJavaVersion = if (buildRecord.javaVersionExecution.stderr == javaVersionExecution.stderr) Seq() else Seq("Java version has changed")
-      val emptyIvyDirectory = if (Files.exists(localIvyRepository)) Seq() else Seq("Local Ivy repository is missing")
-      // TODO: Check previous build commands are OK
-      differentCommit ++ differentJavaVersion ++ emptyIvyDirectory
-    }
+  def buildPlay(playBranch: String, playCommit: String)(implicit ctx: Context): (UUID, PlayBuildRecord) = {
 
     val description = s"${playCommit.substring(0, 7)} [$playBranch]"
 
-    if (reasonsToBuild.isEmpty) {
-      println(s"Play $description already built: ${lastPlayBuildId.get}")
-      lastPlayBuildRecord.get
-    } else {
+    val javaVersionExecution: Execution = JavaVersion.captureJavaVersion()
+
+    def newPlayBuild(): (UUID, PlayBuildRecord) = {
       val newPlayBuildId = UUID.randomUUID()
-      println(s"Starting new Play $description build $newPlayBuildId: "+(reasonsToBuild.mkString(", ")))
+      println(s"Starting new Play $description build: $newPlayBuildId")
 
       gitCheckout(
         localDir = ctx.playHome,
         branch = playBranch,
         commit = playCommit)
 
-      val executions: Seq[Execution] = buildPlayDirectly()
+      val executions: Seq[Execution] = buildPlayDirectly(errorOnNonZeroExit = false)
       val newPlayBuildRecord = PlayBuildRecord(
         pruneInstanceId = ctx.pruneInstanceId,
         playCommit = playCommit,
@@ -61,7 +48,32 @@ object BuildPlay {
       PlayBuildRecord.write(newPlayBuildId, newPlayBuildRecord)
       val oldPersistentState: PrunePersistentState = PrunePersistentState.readOrElse
       PrunePersistentState.write(oldPersistentState.copy(lastPlayBuild = Some(newPlayBuildId)))
-      newPlayBuildRecord
+      (newPlayBuildId, newPlayBuildRecord)
+    }
+
+    val o: Option[(UUID, PlayBuildRecord)] = for {
+      persistentState <- PrunePersistentState.read
+      lastPlayBuildId <- persistentState.lastPlayBuild
+      lastPlayBuildRecord <- PlayBuildRecord.read(lastPlayBuildId)
+    } yield {
+      val reasonsToBuild: Seq[String] = {
+        val differentCommit = if (lastPlayBuildRecord.playCommit == playCommit) Seq() else Seq(s"Play commit has changed to ${playCommit.substring(0,7)}")
+        val differentJavaVersion = if (lastPlayBuildRecord.javaVersionExecution.stderr == javaVersionExecution.stderr) Seq() else Seq("Java version has changed")
+        val emptyIvyDirectory = if (Files.exists(localIvyRepository)) Seq() else Seq("Local Ivy repository is missing")
+        // TODO: Check previous build commands are OK
+        differentCommit ++ differentJavaVersion ++ emptyIvyDirectory
+      }
+      if (reasonsToBuild.isEmpty) {
+        println(s"Play $description already built: ${lastPlayBuildId}")
+        (lastPlayBuildId, lastPlayBuildRecord)
+      } else {
+        println("Can't use existing Play build: " + (reasonsToBuild.mkString(", ")))
+        newPlayBuild()
+      }
+    }
+    o.getOrElse {
+      println("No existing build record for Play")
+      newPlayBuild()
     }
   }
 
@@ -70,7 +82,7 @@ object BuildPlay {
     Paths.get(ivyHome).resolve("local")
   }
 
-  def buildPlayDirectly()(implicit ctx: Context): Seq[Execution] = {
+  def buildPlayDirectly(errorOnNonZeroExit: Boolean = true)(implicit ctx: Context): Seq[Execution] = {
 
     // While we're building there won't be a current Play build for this app
     val oldPersistentState: PrunePersistentState = PrunePersistentState.readOrElse
@@ -99,7 +111,7 @@ object BuildPlay {
       )
     )
 
-    buildCommands.map(run(_, Pump))
+    buildCommands.map(run(_, Pump, errorOnNonZeroExit = errorOnNonZeroExit))
   }
 
 }

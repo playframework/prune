@@ -185,7 +185,11 @@ case class PlayBuildRecord(
   playCommit: String,
   javaVersionExecution: Execution,
   buildExecutions: Seq[Execution]
-)
+) {
+  def successfulBuild: Boolean = buildExecutions.foldLeft(true) {
+    case (b, execution) => b && execution.returnCode.fold(false)(_ == 0)
+  }
+}
 
 object PlayBuildRecord {
 
@@ -226,7 +230,11 @@ case class AppBuildRecord(
   appsCommit: String,
   javaVersionExecution: Execution,
   buildExecutions: Seq[Execution]
-)
+) {
+  def successfulBuild: Boolean = buildExecutions.foldLeft(true) {
+    case (b, execution) => b && execution.returnCode.fold(false)(_ == 0)
+  }
+}
 
 object AppBuildRecord {
 

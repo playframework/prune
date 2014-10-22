@@ -13,34 +13,50 @@ import scala.util.Try
 
 object RunTest {
 
-  def runTestTask(testTask: TestTask)(implicit ctx: Context): Unit = {
+  def runTestTask(testTask: TestTask)(implicit ctx: Context): Option[(UUID, TestRunRecord)] = {
     import testTask.playBranch
     import testTask.info.{ appName, testName, playCommit }
+
+    val description = s"${testName} on app $appName for Play ${playCommit.substring(0, 7)} [$playBranch]"
+
+    val testConfig = ctx.testConfig.get(testName).getOrElse(sys.error(s"Can't run test $description: No test config for $testName"))
+
+    def runTest(): (UUID, TestRunRecord) = {
+      val javaVersionExecution: Execution = JavaVersion.captureJavaVersion()
+      val testRunId = UUID.randomUUID()
+      println(s"Running test $description: $testRunId")
+      val testExecutions = runTestDirectly(appName, testConfig.wrkArgs)
+
+      val testRunRecord = TestRunRecord(
+        appBuildId = PrunePersistentState.read.flatMap(_.lastAppBuilds.get(appName)).get,
+        testName = testName,
+        javaVersionExecution = javaVersionExecution,
+        serverExecution = testExecutions.serverExecution,
+        wrkExecutions = testExecutions.wrkExecutions
+      )
+
+      TestRunRecord.write(testRunId, testRunRecord)
+      (testRunId, testRunRecord)
+    }
+
     BuildApp.buildApp(
       playBranch = testTask.playBranch,
       playCommit = testTask.info.playCommit,
       appsBranch = testTask.appsBranch,
       appsCommit = testTask.appsCommit,
       appName = appName
-    )
-
-    val javaVersionExecution: Execution = JavaVersion.captureJavaVersion()
-
-    val testConfig = ctx.testConfig.get(testName).getOrElse(sys.error(s"No test config for test $testName"))
-
-    val testRunId = UUID.randomUUID()
-    println(s"Running test ${testName} on app $appName for Play ${playCommit.substring(0, 7)} [$playBranch] run: $testRunId")
-    val testExecutions = runTestDirectly(appName, testConfig.wrkArgs)
-
-    val testRunRecord = TestRunRecord(
-      appBuildId = PrunePersistentState.read.flatMap(_.lastAppBuilds.get(appName)).get,
-      testName = testName,
-      javaVersionExecution = javaVersionExecution,
-      serverExecution = testExecutions.serverExecution,
-      wrkExecutions = testExecutions.wrkExecutions
-    )
-
-    TestRunRecord.write(testRunId, testRunRecord)
+    ).fold[Option[(UUID, TestRunRecord)]] {
+      println(s"No existing build record for app, skipping test run $description")
+      None
+    } {
+      case (appBuildId, appBuildRecord) =>
+        if (!appBuildRecord.successfulBuild) {
+          println(s"App build $appBuildId was unsuccessful: skipping test run $description")
+          None
+        } else {
+          Some(runTest())
+        }
+    }
   }
 
   private def withServer[A](appName: String, extraJavaOpts: Seq[String])(body: => A)(implicit ctx: Context): (Execution, A) = {
