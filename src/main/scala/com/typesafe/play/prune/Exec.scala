@@ -172,21 +172,22 @@ object Exec {
     override def setProcessOutputStream(is: InputStream) = stdoutConsumer = Some(is)
     override def setProcessErrorStream(is: InputStream) = stderrConsumer = Some(is)
     override def setProcessInputStream(os: OutputStream) = stdinProducer = Some(os)
+    private def safeToString(is: InputStream): String = {
+      val bytes = IOUtils.toByteArray(is)
+      new String(bytes, "UTF-8")
+    }
     override def start() = {
       stdoutConsumer.foreach { is =>
         stdoutOutput.completeWith(Future {
-          //println("Consuming stdout")
-          IOUtils.toString(is)
+          safeToString(is)
         })
       }
       stderrConsumer.foreach { is =>
         stderrOutput.completeWith(Future {
-          //println("Consuming stderr")
-          IOUtils.toString(is)
+          safeToString(is)
         })
       }
       stdinProducer.foreach { os =>
-        //println("Closing stdin")
         Future { os.close() }
       }
     }
