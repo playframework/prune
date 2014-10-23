@@ -172,19 +172,36 @@ object Exec {
     override def setProcessOutputStream(is: InputStream) = stdoutConsumer = Some(is)
     override def setProcessErrorStream(is: InputStream) = stderrConsumer = Some(is)
     override def setProcessInputStream(os: OutputStream) = stdinProducer = Some(os)
-    private def safeToString(is: InputStream): String = {
-      val bytes = IOUtils.toByteArray(is)
-      new String(bytes, "UTF-8")
+    private def safeButInefficientToString(is: InputStream): String = {
+
+      // Workaround JVM concurrency bug: http://bugs.java.com/view_bug.do?bug_id=5101298
+      def safeRead(): Int = {
+        try is.read() catch {
+          case ioe: IOException if ioe.getMessage == "Stream closed" => -1
+        }
+      }
+
+      val baos = new ByteArrayOutputStream()
+      @scala.annotation.tailrec
+      def copyAll(): Unit = {
+        val c = safeRead()
+        if (c != -1) {
+          baos.write(c)
+          copyAll()
+        }
+      }
+      copyAll()
+      baos.toString("ASCII")
     }
     override def start() = {
       stdoutConsumer.foreach { is =>
         stdoutOutput.completeWith(Future {
-          safeToString(is)
+          safeButInefficientToString(is)
         })
       }
       stderrConsumer.foreach { is =>
         stderrOutput.completeWith(Future {
-          safeToString(is)
+          safeButInefficientToString(is)
         })
       }
       stdinProducer.foreach { os =>
