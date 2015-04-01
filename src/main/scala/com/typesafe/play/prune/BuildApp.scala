@@ -101,10 +101,13 @@ object BuildApp {
       FileUtils.deleteDirectory(targetDir.toFile)
     }
 
+    // Scan the Play repo to get the current Play version (assume this is what we need)
+    val playVersion: String = PlayVersion.readPlayVersion()
+
     val buildCommands: Seq[Command] = Seq(
       Command(
         "sbt",
-        Seq("-Dsbt.ivy.home=<ivy.home>", "stage"),
+        Seq("-Dsbt.ivy.home=<ivy.home>", "-Dplay.version="+playVersion, "stage"),
         workingDir = s"<apps.home>/$appName",
         env = Map(
           "JAVA_HOME" -> "<java8.home>",
