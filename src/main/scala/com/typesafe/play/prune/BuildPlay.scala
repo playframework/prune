@@ -23,7 +23,7 @@ import Exec._
 import PruneGit._
 
 object BuildPlay {
-  def buildPlay(playBranch: String, playCommit: String)(implicit ctx: Context): (UUID, PlayBuildRecord) = {
+  def buildPlay(playBranch: String, playCommit: String)(implicit ctx: Context): Option[(UUID, PlayBuildRecord)] = {
 
     val description = s"${playCommit.substring(0, 7)} [$playBranch]"
 
@@ -51,29 +51,51 @@ object BuildPlay {
       (newPlayBuildId, newPlayBuildRecord)
     }
 
-    val o: Option[(UUID, PlayBuildRecord)] = for {
-      persistentState <- PrunePersistentState.read
-      lastPlayBuildId <- persistentState.lastPlayBuild
-      lastPlayBuildRecord <- PlayBuildRecord.read(lastPlayBuildId)
-    } yield {
-      val reasonsToBuild: Seq[String] = {
-        val differentCommit = if (lastPlayBuildRecord.playCommit == playCommit) Seq() else Seq(s"Play commit has changed to ${playCommit.substring(0,7)}")
-        val differentJavaVersion = if (lastPlayBuildRecord.javaVersionExecution.stderr == javaVersionExecution.stderr) Seq() else Seq("Java version has changed")
-        val emptyIvyDirectory = if (Files.exists(localIvyRepository)) Seq() else Seq("Local Ivy repository is missing")
-        // TODO: Check previous build commands are OK
-        differentCommit ++ differentJavaVersion ++ emptyIvyDirectory
-      }
-      if (reasonsToBuild.isEmpty) {
-        println(s"Play $description already built: ${lastPlayBuildId}")
-        (lastPlayBuildId, lastPlayBuildRecord)
-      } else {
-        println("Can't use existing Play build: " + (reasonsToBuild.mkString(", ")))
-        newPlayBuild()
+    def lastBuild(): Option[(UUID, PlayBuildRecord)] = {
+      for {
+        persistentState <- PrunePersistentState.read
+        lastPlayBuildId <- persistentState.lastPlayBuild
+        lastPlayBuildRecord <- PlayBuildRecord.read(lastPlayBuildId)
+      } yield (lastPlayBuildId, lastPlayBuildRecord)
+    }
+
+    def buildSuccessAndFailuresForCommit(): (Int, Int) = {
+      Records.iteratorAll[PlayBuildRecord](Paths.get(ctx.dbHome, "play-builds")).foldLeft((0, 0)) {
+        case ((successes, failures), (uuid, record)) if (record.playCommit == playCommit) =>
+          if (record.successfulBuild) (successes+1, failures) else (successes, failures+1)
+        case (acc, _) => acc
       }
     }
-    o.getOrElse {
-      println("No existing build record for Play")
-      newPlayBuild()
+
+    def buildUnlessTooManyFailures(): Option[(UUID, PlayBuildRecord)] = {
+      val (successes, failures) = buildSuccessAndFailuresForCommit()
+      if (failures - successes >= ctx.args.maxBuildFailures) {
+        println(s"Too many previous build failures for ${playCommit.substring(0,7)} ($successes successes, $failures failures), aborting build")
+        None
+      } else {
+        Some(newPlayBuild())
+      }
+    }
+
+    lastBuild().fold[Option[(UUID, PlayBuildRecord)]] {
+      println("No current build for Play")
+      buildUnlessTooManyFailures()
+    } {
+      case (lastPlayBuildId, lastPlayBuildRecord) =>
+        // We hava previously built version of Play. Can we use it?
+        if (lastPlayBuildRecord.playCommit != playCommit) {
+          println(s"New Play build needed: Play commit has changed to ${playCommit.substring(0,7)}")
+          buildUnlessTooManyFailures()
+        } else if (lastPlayBuildRecord.javaVersionExecution.stderr == javaVersionExecution.stderr) {
+          println("New Play build needed: Java version has changed since last build")
+          buildUnlessTooManyFailures()
+        } else if (Files.exists(localIvyRepository)) {
+          println("New Play build needed: Local Ivy repository is missing")
+          buildUnlessTooManyFailures()
+        } else {
+          println("Using existing Play build")
+          Some((lastPlayBuildId, lastPlayBuildRecord))
+        }
     }
   }
 

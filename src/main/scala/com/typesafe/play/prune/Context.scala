@@ -101,6 +101,7 @@ case class Args(
   playFetch: Boolean = true,
   appsFetch: Boolean = true,
   maxTestRuns: Option[Int] = None,
+  maxBuildFailures: Int = 2,
   maxWrkDuration: Option[Int] = None,
   playBranches: Seq[String] = Seq.empty,
   playRevs: Seq[String] = Seq.empty,
@@ -144,6 +145,9 @@ object Args {
         },
         opt[Int]("max-total-minutes") action { (i, c) =>
           c.copy(maxTotalMinutes = Some(i))
+        },
+        opt[Int]("max-build-failures") action { (i, c) =>
+          c.copy(maxBuildFailures = i)
         },
         opt[String]("play-branch") optional() unbounded() action { (s, c) =>
           c.copy(playBranches = c.playBranches :+ s)

@@ -20,11 +20,9 @@ object BuildApp {
 
     val description = s"$appName for Play ${playCommit.substring(0, 7)} [$playBranch]"
 
-    val (playBuildId, playBuildRecord) = BuildPlay.buildPlay(playBranch = playBranch, playCommit = playCommit)
-
     val javaVersionExecution: Execution = JavaVersion.captureJavaVersion()
 
-    def newAppBuild(): (UUID, AppBuildRecord) = {
+    def newAppBuild(playBuildId: UUID): (UUID, AppBuildRecord) = {
       val newAppBuildId = UUID.randomUUID()
       println(s"Starting new app $description build: $newAppBuildId")
 
@@ -56,36 +54,75 @@ object BuildApp {
       (newAppBuildId, newAppBuildRecord)
     }
 
-    if (!playBuildRecord.successfulBuild) {
-      println(s"Play build $playBuildId was unsuccessful: skipping build of app $description")
-      None
-    } else {
-      val o: Option[(UUID, AppBuildRecord)] = for {
+    def lastBuild(): Option[(UUID, AppBuildRecord)] = {
+      for {
         persistentState <- PrunePersistentState.read
         lastAppBuildId <- persistentState.lastAppBuilds.get(appName)
         lastAppBuildRecord <- AppBuildRecord.read(lastAppBuildId)
-      } yield {
-        val reasonsToBuild: Seq[String] = {
-          val differentPlayBuild = if (lastAppBuildRecord.playBuildId == playBuildId) Seq() else Seq("Play build has changed")
-          val differentCommit = if (lastAppBuildRecord.appsCommit == appsCommit) Seq() else Seq("Apps commit has changed")
-          val differentJavaVersion = if (lastAppBuildRecord.javaVersionExecution.stderr == javaVersionExecution.stderr) Seq() else Seq("Java version has changed")
-          val testBinary = Paths.get(ctx.appsHome, appName, "target/universal/stage/bin", appName)
-          val missingTestBinary = if (Files.exists(testBinary)) Seq() else Seq("App binary is missing")
-          // TODO: Check previous build commands are OK
-          differentPlayBuild ++ differentCommit ++ differentJavaVersion ++ missingTestBinary
+      } yield (lastAppBuildId, lastAppBuildRecord)
+    }
+
+    def buildSuccessAndFailuresForCommit(): (Int, Int) = {
+      Records.iteratorAll[AppBuildRecord](Paths.get(ctx.dbHome, "app-builds")).foldLeft((0, 0)) {
+        case (acc@(successes, failures), (uuid, record)) if (record.appsCommit == appsCommit) =>
+          PlayBuildRecord.read(record.playBuildId).fold {
+            // If we can't load the Play build then we don't know if the build for that Play commit failed
+            acc
+          } { playBuildRecord =>
+            if (playBuildRecord.playCommit == playCommit) {
+              if (record.successfulBuild) (successes+1, failures) else (successes, failures+1)
+            } else acc
+          }
+        case (acc, _) => acc
+      }
+    }
+
+    val optPlayBuild: Option[(UUID, PlayBuildRecord)] = BuildPlay.buildPlay(playBranch = playBranch, playCommit = playCommit)
+
+    optPlayBuild.fold[Option[(UUID, AppBuildRecord)]] {
+      println(s"No Play build: skipping build of app $description")
+      None
+    } {
+      case (playBuildId, playBuildRecord) =>
+
+        def buildUnlessTooManyFailures(): Option[(UUID, AppBuildRecord)] = {
+          val (successes, failures) = buildSuccessAndFailuresForCommit()
+          if (failures - successes >= ctx.args.maxBuildFailures) {
+            println(s"Too many previous build failures for app $description ($successes successes, $failures failures), aborting build")
+            None
+          } else {
+            Some(newAppBuild(playBuildId))
+          }
         }
-        if (reasonsToBuild.isEmpty) {
-          println(s"App $description already built: ${lastAppBuildId}")
-          (lastAppBuildId, lastAppBuildRecord)
+
+        if (!playBuildRecord.successfulBuild) {
+          println(s"Play build $playBuildId was unsuccessful: skipping build of app $description")
+          None
         } else {
-          println("Can't use existing app build: " + (reasonsToBuild.mkString(", ")))
-          newAppBuild()
+          lastBuild().fold[Option[(UUID, AppBuildRecord)]] {
+            println(s"No existing app build record for $description")
+            buildUnlessTooManyFailures()
+          } {
+            case (lastAppBuildId, lastAppBuildRecord) =>
+              // We have a previously built app. Can we use it?
+              if (lastAppBuildRecord.playBuildId != playBuildId) {
+                println("Need new app build: Play build has changed")
+                buildUnlessTooManyFailures()
+              } else if (lastAppBuildRecord.appsCommit != appsCommit) {
+                println("Need new app build: apps commit has changed")
+                buildUnlessTooManyFailures()
+              } else if (lastAppBuildRecord.javaVersionExecution.stderr != javaVersionExecution.stderr) {
+                println("Need new app build: Java version has changed")
+                buildUnlessTooManyFailures()
+              } else if (!Files.exists(Paths.get(ctx.appsHome, appName, "target/universal/stage/bin", appName))) {
+                println("Need new app build: app binary not found")
+                buildUnlessTooManyFailures()
+              } else {
+                println(s"App $description already built: ${lastAppBuildId}")
+                Some((lastAppBuildId, lastAppBuildRecord))
+              }
+          }
         }
-      }
-      o.orElse {
-        println(s"No existing build record for Play, skipping build of app $description")
-        Some(newAppBuild())
-      }
     }
   }
 
