@@ -113,13 +113,17 @@ case class Args(
   testOrAppName: Option[String] = None,
   wrkArgs: Seq[String] = Seq.empty,
   playBuild: Boolean = true,
-  appBuild: Boolean = true)
+  appBuild: Boolean = true,
+  verbose: Boolean = false)
 object Args {
   def parse(rawArgs: Seq[String]) = {
     val parser = new scopt.OptionParser[Args]("prune") {
       head("prune")
       opt[String]("config-file") action { (s, c) =>
         c.copy(configFile = Some(s))
+      }
+      opt[Unit]("verbose") action { (_, c) =>
+        c.copy(verbose = true)
       }
       cmd("pull") action { (_, c) =>
         c.copy(command = Some(Pull))

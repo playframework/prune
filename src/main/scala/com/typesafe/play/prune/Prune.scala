@@ -163,6 +163,10 @@ object Prune {
       DateTime.now.plusMinutes(mins)
     }
 
+    val lastPlayBuildCommit: Option[String] = BuildPlay.lastBuild().map {
+      case (_, buildRecord) => buildRecord.playCommit
+    }
+
     val filteredPlayTests = filterBySeq(ctx.playTests, ctx.args.playBranches, (_: PlayTestsConfig).playBranch)
     val neededTasks: Seq[TestTask] = filteredPlayTests.flatMap { playTest =>
       //println(s"Working out tests to run for $playTest")
@@ -188,7 +192,13 @@ object Prune {
           )
         }
       }
-    }.distinct.sortBy(_.appsCommit).sortBy(_.info.playCommit)
+    }.distinct.sortBy(_.appsCommit).sortWith {
+      case (task1, task2) => task1.playCommitTime.compareTo(task2.playCommitTime) > 0 // Reverse date order
+    }.sortWith {
+      case (task1, task2) => lastPlayBuildCommit.fold(false) { c =>
+        (task1.info.playCommit == c) // Start with the current Play build
+      }
+    }
 
     val completedTaskInfos: Seq[TestTaskInfo] = DB.iterator.map { join =>
           TestTaskInfo(
@@ -203,6 +213,9 @@ object Prune {
     println(s"Prune tests needed: ${neededTasks.map(_.info.playCommit).distinct.size} Play revisions, ${neededTasks.size} test runs")
     println(s"Prune tests remaining: ${tasksToRun.map(_.info.playCommit).distinct.size} Play revisions, ${tasksToRun.size} test runs")
 
+    if (ctx.args.verbose) {
+      println(s"First task to run: ${tasksToRun.headOption}")
+    }
 
     val truncatedTasksToRun = ctx.args.maxTestRuns.fold(tasksToRun) { i =>
       if (tasksToRun.size > i) {

@@ -51,14 +51,6 @@ object BuildPlay {
       (newPlayBuildId, newPlayBuildRecord)
     }
 
-    def lastBuild(): Option[(UUID, PlayBuildRecord)] = {
-      for {
-        persistentState <- PrunePersistentState.read
-        lastPlayBuildId <- persistentState.lastPlayBuild
-        lastPlayBuildRecord <- PlayBuildRecord.read(lastPlayBuildId)
-      } yield (lastPlayBuildId, lastPlayBuildRecord)
-    }
-
     def buildSuccessAndFailuresForCommit(): (Int, Int) = {
       Records.iteratorAll[PlayBuildRecord](Paths.get(ctx.dbHome, "play-builds")).foldLeft((0, 0)) {
         case ((successes, failures), (uuid, record)) if (record.playCommit == playCommit) =>
@@ -94,6 +86,14 @@ object BuildPlay {
           Some((lastPlayBuildId, lastPlayBuildRecord))
         }
     }
+  }
+
+  def lastBuild()(implicit ctx: Context): Option[(UUID, PlayBuildRecord)] = {
+    for {
+      persistentState <- PrunePersistentState.read
+      lastPlayBuildId <- persistentState.lastPlayBuild
+      lastPlayBuildRecord <- PlayBuildRecord.read(lastPlayBuildId)
+    } yield (lastPlayBuildId, lastPlayBuildRecord)
   }
 
   private def localIvyRepository(implicit ctx: Context): Path = {
