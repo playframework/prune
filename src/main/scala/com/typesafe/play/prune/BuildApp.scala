@@ -111,9 +111,6 @@ object BuildApp {
               } else if (lastAppBuildRecord.appsCommit != appsCommit) {
                 println("Need new app build: apps commit has changed")
                 buildUnlessTooManyFailures()
-              } else if (lastAppBuildRecord.javaVersionExecution.stderr != javaVersionExecution.stderr) {
-                println("Need new app build: Java version has changed")
-                buildUnlessTooManyFailures()
               } else if (!Files.exists(Paths.get(ctx.appsHome, appName, "target/universal/stage/bin", appName))) {
                 println("Need new app build: app binary not found")
                 buildUnlessTooManyFailures()
