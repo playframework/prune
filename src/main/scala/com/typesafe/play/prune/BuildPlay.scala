@@ -78,7 +78,7 @@ object BuildPlay {
         if (lastPlayBuildRecord.playCommit != playCommit) {
           println(s"New Play build needed: Play commit has changed to ${playCommit.substring(0,7)}")
           buildUnlessTooManyFailures()
-        } else if (Files.exists(localIvyRepository)) {
+        } else if (!Files.exists(localIvyRepository)) {
           println("New Play build needed: Local Ivy repository is missing")
           buildUnlessTooManyFailures()
         } else {
