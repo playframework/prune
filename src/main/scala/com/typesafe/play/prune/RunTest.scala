@@ -140,12 +140,12 @@ object RunTest {
       Capture,
       timeout = Some((durationSeconds + 10) * 1000)
     )
-    {
-      val display = execution.stdout.fold("No wrk stdout") { stdout =>
-        (Results.parseWrkOutput(stdout).right.flatMap(_.summary.right.map(_.display)): Either[String,String]).merge
-      }
-      println(s"Wrk summary: $display")
+
+    val display = execution.stdout.fold("No wrk stdout") { stdout =>
+      (Results.parseWrkOutput(stdout).right.flatMap(_.summary.right.map(_.display)): Either[String,String]).merge
     }
+    println(s"Wrk summary: $display")
+
     execution
   }
 
