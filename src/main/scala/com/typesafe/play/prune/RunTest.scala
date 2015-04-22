@@ -130,7 +130,7 @@ object RunTest {
     val threads = wrkConfig.getInt("threads")
     val connections = wrkConfig.getInt("connections")
     println(s"Running wrk with "+wrkArgs.mkString(" ")+s" for ${durationSeconds}s")
-    run(
+    val execution = run(
       Command(
         program = "wrk",
         args = Seq(s"-t$threads", s"-c$connections", s"-d${durationSeconds}s", "-s<assets.home>/wrk_report.lua") ++ wrkArgs,
@@ -140,6 +140,13 @@ object RunTest {
       Capture,
       timeout = Some((durationSeconds + 10) * 1000)
     )
+    {
+      val display = execution.stdout.fold("No wrk stdout") { stdout =>
+        (Results.parseWrkOutput(stdout).right.flatMap(_.summary.right.map(_.display)): Either[String,String]).merge
+      }
+      println(s"Wrk summary: $display")
+    }
+    execution
   }
 
   private def getOverriddenWrkDuration(durationConfigName: String)(implicit ctx: Context): Long = {
