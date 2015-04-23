@@ -141,7 +141,7 @@ object BuildApp {
     val buildCommands: Seq[Command] = Seq(
       Command(
         "sbt",
-        Seq("-Dsbt.ivy.home=<ivy.home>", "-Dplay.version="+playVersion, "stage"),
+        Seq("-Dsbt.ivy.home=<ivy.home>", "-Dplay.version="+playVersion, ";clean;stage"),
         workingDir = s"<apps.home>/$appName",
         env = Map(
           "JAVA_HOME" -> "<java8.home>",

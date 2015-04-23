@@ -121,7 +121,7 @@ object BuildPlay {
     val buildCommands: Seq[Command] = Seq(
       Command(
         program = "./build",
-        args = Seq("-Dsbt.ivy.home=<ivy.home>", "publish-local"),
+        args = Seq("-Dsbt.ivy.home=<ivy.home>", ";clean;publish-local"),
         env = Map(
           "JAVA_HOME" -> "<java8.home>",
           "LANG" -> "en_US.UTF-8"
