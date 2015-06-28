@@ -136,7 +136,7 @@ object BuildApp {
     }
 
     // Scan the Play repo to get the current Play version (assume this is what we need)
-    val playVersion: String = PlayVersion.readPlayVersion()
+    val playVersion: String = PlayVersion.readPlayVersionFromFile()
 
     val buildCommands: Seq[Command] = Seq(
       Command(
