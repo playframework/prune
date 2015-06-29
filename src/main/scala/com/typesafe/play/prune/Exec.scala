@@ -139,7 +139,7 @@ object Exec {
         case None =>
           val r = Try {
             watchdog.destroyProcess()
-            resultHandler.waitFor(ctx.args.testShutdownSeconds * 1000)
+            resultHandler.waitFor(ctx.testShutdownSeconds * 1000)
             val endTime = DateTime.now
             val returnCode = if (resultHandler.hasResult) resultHandler.getExitValue else resultHandler.getException.getExitValue
             val streamResult = streamResultGetter()

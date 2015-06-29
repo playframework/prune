@@ -3,6 +3,8 @@
  */
 package com.typesafe.play.prune
 
+import java.util.concurrent.TimeUnit
+
 import com.typesafe.config.Config
 import java.util.UUID
 import scala.collection.convert.WrapAsScala._
@@ -59,10 +61,6 @@ case class Context(
   def playBranches = playTests.map(_.playBranch).distinct
   def appsBranches = playTests.map(_.appsBranch).distinct
 
-//  private def getEntryNames(c: Config): Seq[String] = iterableAsScalaIterable(config.entrySet).to[Seq].foldLeft[Seq[String]](Seq.empty) {
-//    case (names, entry) => names :+ entry.getKey
-//  }
-
   val testConfig: Map[String, TestConfig] = {
     asScalaBuffer(config.getConfigList("tests")).foldLeft[Map[String, TestConfig]](Map.empty) {
       case (m, entry) =>
@@ -75,6 +73,8 @@ case class Context(
       ))
     }
   }
+
+  val testShutdownSeconds: Int = args.testShutdownSeconds.getOrElse(config.getDuration("testShutdown", TimeUnit.SECONDS).toInt)
 
   val yourkitHome: String = config.getString("yourkit.home")
   val yourkitAgent: String = config.getString("yourkit.agent")
@@ -107,7 +107,7 @@ case class Args(
   playRevs: Seq[String] = Seq.empty,
   lexicalOrder: Boolean = false,
   testNames: Seq[String] = Seq.empty,
-  testShutdownSeconds: Int = 10,
+  testShutdownSeconds: Option[Int] = None,
   maxTotalMinutes: Option[Int] = None,
   outputFile: Option[String] = None,
   playHome: Option[String] = None,
@@ -168,7 +168,7 @@ object Args {
           c.copy(testNames = c.testNames :+ s)
         },
         opt[Int]("test-shutdown-seconds") action { (i, c) =>
-          c.copy(testShutdownSeconds = i)
+          c.copy(testShutdownSeconds = Some(i))
         } text("How long to wait for test processes to shutdown after they've been asked to terminate")
       )
       cmd("push-test-results") action { (_, c) =>
