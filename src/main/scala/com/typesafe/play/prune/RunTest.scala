@@ -110,6 +110,8 @@ object RunTest {
 
     try {
 
+      // Repeatedly try to connect to localhost:9000 until we detect that the
+      // server has started. Not very elegant, but it should work.
       val serverStarted = pollFor(max = 10000, interval = 50) { canConnectTo("localhost", 9000, timeout = 50) }
       if (!serverStarted) {
         val e: Try[Execution] = terminateServer()

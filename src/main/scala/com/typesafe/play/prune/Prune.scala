@@ -167,6 +167,12 @@ object Prune {
       case (_, buildRecord) => buildRecord.playCommit
     }
 
+    val sortFunction: (TestTask, TestTask) => Boolean = if (ctx.args.lexicalOrder) {
+      case (task1, task2) => task1.playCommitTime.compareTo(task2.playCommitTime) > 0 // Reverse date order
+    } else {
+      case (task1, task2) => task1.info.playCommit.compareTo(task1.info.playCommit) < 0 // Forward lexical order
+    }
+
     val filteredPlayTests = filterBySeq(ctx.playTests, ctx.args.playBranches, (_: PlayTestsConfig).playBranch)
     val neededTasks: Seq[TestTask] = filteredPlayTests.flatMap { playTest =>
       //println(s"Working out tests to run for $playTest")
@@ -192,9 +198,7 @@ object Prune {
           )
         }
       }
-    }.distinct.sortBy(_.appsCommit).sortWith {
-      case (task1, task2) => task1.playCommitTime.compareTo(task2.playCommitTime) > 0 // Reverse date order
-    }.sortWith {
+    }.distinct.sortBy(_.appsCommit).sortWith(sortFunction).sortWith {
       case (task1, task2) => lastPlayBuildCommit.fold(false) { c =>
         (task1.info.playCommit == c) // Start with the current Play build
       }

@@ -105,6 +105,7 @@ case class Args(
   maxWrkDuration: Option[Int] = None,
   playBranches: Seq[String] = Seq.empty,
   playRevs: Seq[String] = Seq.empty,
+  lexicalOrder: Boolean = false,
   testNames: Seq[String] = Seq.empty,
   maxTotalMinutes: Option[Int] = None,
   outputFile: Option[String] = None,
@@ -158,6 +159,9 @@ object Args {
         },
         opt[String]("play-rev") optional() unbounded() action { (s, c) =>
           c.copy(playRevs = c.playRevs :+ s)
+        },
+        opt[Unit]("lexical-order") action { (_, c) =>
+          c.copy(lexicalOrder = true)
         },
         opt[String]("test-name") optional() unbounded() action { (s, c) =>
           c.copy(testNames = c.testNames :+ s)
