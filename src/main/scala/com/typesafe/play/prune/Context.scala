@@ -107,6 +107,7 @@ case class Args(
   playRevs: Seq[String] = Seq.empty,
   lexicalOrder: Boolean = false,
   testNames: Seq[String] = Seq.empty,
+  testShutdownSeconds: Int = 10,
   maxTotalMinutes: Option[Int] = None,
   outputFile: Option[String] = None,
   playHome: Option[String] = None,
@@ -162,10 +163,13 @@ object Args {
         },
         opt[Unit]("lexical-order") action { (_, c) =>
           c.copy(lexicalOrder = true)
-        },
+        } text("Run tests in commit lexical order, rather than date order"),
         opt[String]("test-name") optional() unbounded() action { (s, c) =>
           c.copy(testNames = c.testNames :+ s)
-        }
+        },
+        opt[Int]("test-shutdown-seconds") action { (i, c) =>
+          c.copy(testShutdownSeconds = i)
+        } text("How long to wait for test processes to shutdown after they've been asked to terminate")
       )
       cmd("push-test-results") action { (_, c) =>
         c.copy(command = Some(PushTestResults))
