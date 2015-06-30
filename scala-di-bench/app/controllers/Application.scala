@@ -1,24 +1,26 @@
 package controllers
 
+import javax.inject.{Inject, Singleton}
 import play.api._
 import play.api.mvc._
 import play.api.libs.iteratee.Enumerator
 import play.api.libs.json.Json
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
+@Singleton
+class Application @Inject() (implicit
+  ec: ExecutionContext
+) extends Controller {
 
-class Application extends Controller {
-
-  def simple = Action(parse.empty) { request =>
+  def simple = Action { request =>
     Ok("Hello world.")
   }
 
-  def download(length: Int) = Action(parse.empty) { request =>
+  def download(length: Int) = Action { request =>
     Ok(new Array[Byte](length))
   }
 
-  def downloadChunked(length: Int) = Action(parse.empty) { request =>
+  def downloadChunked(length: Int) = Action { request =>
 
     @volatile
     var remaining = length
@@ -43,15 +45,15 @@ class Application extends Controller {
     Ok("upload")
   }
 
-  def templateSimple = Action(parse.empty) { request =>
+  def templateSimple = Action { request =>
     Ok(views.html.simple("simple"))
   }
 
-  def templateLang = Action(parse.empty) { request =>
+  def templateLang = Action { request =>
     Ok(views.html.lang())
   }
 
-  def jsonEncode = Action(parse.empty) { request =>
+  def jsonEncode = Action { request =>
     Ok(Json.obj("message" -> "Hello, World!"))
   }
 

@@ -9,3 +9,7 @@ libraryDependencies ++= Seq(
 )
 
 javacOptions ++= Seq("-Xlint:deprecation")
+
+scalaVersion := "2.10.5"
+
+routesGenerator := InjectedRoutesGenerator
