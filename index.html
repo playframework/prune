@@ -170,17 +170,23 @@ testNameEndings.forEach(function(testNameEnding) {
   var maxLat = 0;
   rowForEach(function(branchName, testName, branchTestData) {
     function maxForResult(resultName) {
-      var max = 0;
-      branchTestData.forEach(function(d) {
-        var r = d[resultName];
-        if (r != null && max < r) { max = r; }
+      var dataValues = branchTestData.map(function(d) {
+        return d[resultName];
+      }).filter(function(d) {
+        return d != null;
       });
-      return max;
+      return seriesMax(dataValues);
     }
     maxRps = Math.max(maxRps, maxForResult('req/s'));
-    maxLat = Math.max(maxLat, maxForResult('latMean'));
-    maxLat = Math.max(maxLat, maxForResult('lat95'));
+    maxLat = Math.max(maxLat, maxForResult('latMean'), maxForResult('lat95'));
   });
+  function seriesMax(data) {
+      var max = 0;
+      data.forEach(function(d) {
+        if (d != null && max < d) { max = d; }
+      });
+      return max;
+  }
   function niceMax(max) {
     // Code adapted from jquery.flot.js
     var noTicks = 5;
