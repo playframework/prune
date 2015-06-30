@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<title>Play Framework performance tests</title>
+<script src="jquery-1.11.1.min.js" charset="utf-8"></script>
+<script src="jquery.flot-0.8.3.min.js" charset="utf-8"></script>
+<script src="jquery.flot.time-0.8.3.min.js" charset="utf-8"></script>
+<script src="prune-data.js"></script>
+<style>
+td.result {
+  text-align: right;
+}
+</style>
+<script>
+$(function () {
+function commitTestData(commit, testName) {
+  var commitResults = report.results[commit];
+  if (!commitResults) return null;
+  return commitResults[testName];
+}
+function branchData(branchName, testName) {
+  var data = [];
+  report.branches[branchName].forEach(function(commitInfo) {
+    //console.log(commitInfo.commit);
+    var datum = {};
+    $.extend(datum, commitInfo);
+    var result = commitTestData(commitInfo.commit, testName);
+    if (result) $.extend(datum, result);
+    data.push(datum);
+  });
+  return data.reverse();
+}
+
+function displayReport(branchName, testName) {
+  var tableBodyElement = $('table#report tbody');
+  tableBodyElement.empty(); // Clear table data
+  branchData(branchName, testName).forEach(function(data, dataIndex) {
+    console.log(data);
+    function formatResult(name, fixed) {
+      var r = data[name];
+      if (r == null) {
+        return "&mdash;";
+      } else {
+        return r.toFixed(fixed);
+      }
+    }
+    tableBodyElement.append(
+      '<tr>' +
+        '<td><a href="https://github.com/playframework/playframework/commit/'+data.commit+'" target="_blank">'+data.commit.slice(0, 7)+'</a></td>'+
+        '<td>'+new Date(data.time).toString()+'</td>' +
+        '<td class="result">'+formatResult('req/s', 0)+'</td>' +
+        '<td class="result">'+formatResult('latMean', 2)+'</td>' +
+        '<td class="result">'+formatResult('lat95', 2)+'</td>' +
+      '</tr>'
+    );
+  });
+}
+
+displayReport('master', 'scala-di-simple');
+
+});
+</script>
+</head>
+<body>
+<table id="report">
+<thead>
+  <th>Commit</th>
+  <th>Commit time</th>
+  <th>Requests/second</th>
+  <th>Latency (mean)</th>
+  <th>Latency (95%)</th>
+</thead>
+<tbody><!-- This bit is dynamically generated --></tbody>
+</table>
+</body>
+</html>
