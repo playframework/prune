@@ -1,4 +1,4 @@
-name := "java-bench"
+name := "java-di-bench"
 
 version := "1.0-SNAPSHOT"
 

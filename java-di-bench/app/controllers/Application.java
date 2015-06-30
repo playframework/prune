@@ -1,14 +1,12 @@
 package controllers;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.io.ByteArrayOutputStream;
 import javax.inject.*;
 import play.*;
 import play.mvc.*;
+import play.libs.Json;
 
 import views.html.*;
 
@@ -57,6 +55,12 @@ public class Application extends Controller {
 
   public Result templateLang() {
     return ok(views.html.lang.render());
+  }
+
+  public Result jsonEncode() {
+    ObjectNode result = Json.newObject();
+    result.put("message", "Hello World!");
+    return ok(result);
   }
 
 }

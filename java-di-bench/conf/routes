@@ -4,3 +4,4 @@ GET   /download-chunked/:length controllers.Application.downloadChunked(length: 
 PUT   /upload                   controllers.Application.upload
 GET   /template/simple          controllers.Application.templateSimple
 GET   /template/lang            controllers.Application.templateLang
+GET   /json/encode              controllers.Application.jsonEncode
