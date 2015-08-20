@@ -1,12 +1,9 @@
 package controllers
 
-import play.api._
+import akka.stream.scaladsl.Source
+import akka.util.ByteString
 import play.api.mvc._
-import play.api.libs.iteratee.Enumerator
 import play.api.libs.json.Json
-import scala.concurrent.Future
-
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
 
 object Application extends Controller {
 
@@ -15,28 +12,26 @@ object Application extends Controller {
   }
 
   def download(length: Int) = Action(parse.empty) { request =>
-    Ok(new Array[Byte](length))
+    Ok(ByteString(new Array[Byte](length)))
   }
 
   def downloadChunked(length: Int) = Action(parse.empty) { request =>
 
-    @volatile
-    var remaining = length
     val maxArraySize = 4 * 1024
+    val numFullChunks = length / maxArraySize
+    val lastChunkSize = length % maxArraySize
 
-    val arrayEnum = Enumerator.generateM {
-      val arraySize = Math.min(remaining, maxArraySize)
-      val optArray = if (arraySize == 0) None else {
-        remaining -= arraySize
-        Some(new Array[Byte](arraySize))
-      }
-      Future.successful(optArray)
+    val fullChunks = Source(1 to numFullChunks).map { _ =>
+      ByteString(new Array[Byte](maxArraySize))
     }
 
-    Result(
-      header = ResponseHeader(200),
-      body = arrayEnum
-    )
+    val allChunks = if (lastChunkSize > 0) {
+      fullChunks ++ Source.single(ByteString(new Array[Byte](lastChunkSize)))
+    } else {
+      fullChunks
+    }
+
+    Ok.chunked(allChunks)
   }
 
   def upload = Action(parse.raw) { request =>
