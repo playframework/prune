@@ -323,11 +323,11 @@ This command runs a performance test against your local code while capturing dat
 * Build the local Play instance and the local app needed for the scala-simple test (scala-benchmark) then run the scala-simple test and capture a YourKit snapshot.
 
   ```
-  prune wrk /my/projects/play /my/projects/apps scala-simple
+  prune profile /my/projects/play /my/projects/apps scala-simple
   ```
 
 * Run the scala-simple test and capture a profiling snapshot without rebuilding Play or the app.
 
   ```
-  prune wrk /my/projects/play /my/projects/apps scala-simple --skip-play-build --skip-app-build
+  prune profile /my/projects/play /my/projects/apps scala-simple --skip-play-build --skip-app-build
   ```
