@@ -1,9 +1,11 @@
 package controllers
 
+import akka.stream.scaladsl.Source
+import akka.util.ByteString
 import javax.inject.{Inject, Singleton}
 import play.api._
+import play.api.http.{HttpChunk, HttpEntity}
 import play.api.mvc._
-import play.api.libs.iteratee.Enumerator
 import play.api.libs.json.Json
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -22,22 +24,25 @@ class Application @Inject() (implicit
 
   def downloadChunked(length: Int) = Action { request =>
 
-    @volatile
-    var remaining = length
     val maxArraySize = 4 * 1024
 
-    val arrayEnum = Enumerator.generateM {
-      val arraySize = Math.min(remaining, maxArraySize)
-      val optArray = if (arraySize == 0) None else {
-        remaining -= arraySize
-        Some(new Array[Byte](arraySize))
+    val itr = new Iterator[HttpChunk.Chunk] {
+      private var remaining = length
+      private def nextArraySize = Math.min(remaining, maxArraySize)
+      override def hasNext = nextArraySize > 0
+      override def next = {
+        val size = nextArraySize
+        assert(size > 0)
+        HttpChunk.Chunk(ByteString(new Array[Byte](size)))
       }
-      Future.successful(optArray)
     }
 
     Result(
       header = ResponseHeader(200),
-      body = arrayEnum
+      body = HttpEntity.Chunked(
+        chunks = Source(() => itr),
+        contentType = None
+      )
     )
   }
 
