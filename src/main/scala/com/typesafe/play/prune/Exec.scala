@@ -183,7 +183,7 @@ object Exec {
        * to avoid 
        */
       @scala.annotation.tailrec
-      def copyAll(size: Int): Unit = {
+      def copyAll(size: Int, truncate: Boolean): Unit = {
 
         /** Write to the buffer and log a message if an OOME is caught. */
         def logOutOfMemoryError[A](f: => A): A = {
@@ -206,17 +206,22 @@ object Exec {
             logOutOfMemoryError {
               baos.write(c)
             }
-            copyAll(size + 1)
+            copyAll(size + 1, truncate = false)
           }          
-        } else {
-          // We've logged more than maxSize
+        } else if (!truncate) {
+          // We've captured more than maxSize, ignore the rest
+          println(s"Process output exceeds $maxSize bytes, truncating.")
           val truncateMessage = s"\n--- Truncated output to $maxSize bytes ---"
           logOutOfMemoryError {
             baos.write(truncateMessage.getBytes("ASCII"))
           }
+          copyAll(size, truncate = true)
+        } else if (truncate) {
+          // We've already started truncating, just keep doing it
+          copyAll(size, truncate = true)
         }
       }
-      copyAll(0)
+      copyAll(0, truncate = false)
 
       baos.toString("ASCII")
     }
