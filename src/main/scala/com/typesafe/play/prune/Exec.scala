@@ -196,18 +196,18 @@ object Exec {
           }
         }
 
-        if (size < maxSize) {
-          val c = try is.read() catch {
-            // Work around JVM concurrency bug: http://bugs.java.com/view_bug.do?bug_id=5101298
-            case ioe: IOException if ioe.getMessage == "Stream closed" => -1
-          }
+        val c = try is.read() catch {
+          // Work around JVM concurrency bug: http://bugs.java.com/view_bug.do?bug_id=5101298
+          case ioe: IOException if ioe.getMessage == "Stream closed" => -1
+        }
 
-          if (c != -1) {
-            logOutOfMemoryError {
-              baos.write(c)
-            }
-            copyAll(size + 1, truncate = false)
-          }          
+        if (c == -1) {
+          // Do nothing and terminate the loop
+        } else if (size < maxSize) {
+          logOutOfMemoryError {
+            baos.write(c)
+          }
+          copyAll(size + 1, truncate = false)
         } else if (!truncate) {
           // We've captured more than maxSize, ignore the rest
           println(s"Process output exceeds $maxSize bytes, truncating.")
@@ -218,6 +218,7 @@ object Exec {
           copyAll(size, truncate = true)
         } else if (truncate) {
           // We've already started truncating, just keep doing it
+
           copyAll(size, truncate = true)
         }
       }
