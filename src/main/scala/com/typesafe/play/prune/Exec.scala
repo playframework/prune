@@ -195,7 +195,13 @@ object Exec {
         }
 
         if (c != -1) {
-          baos.write(c)
+          try baos.write(c) catch {
+            case oome: OutOfMemoryError  =>
+              // Print out some diagnostic information
+              print("OOME hit at size ")
+              println(size)
+              throw oome
+          }
           copyAll(size + 1)
         }
 
