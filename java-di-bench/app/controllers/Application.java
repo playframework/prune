@@ -1,10 +1,15 @@
 package controllers;
 
+import akka.stream.javadsl.Source;
+import akka.util.ByteString;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.io.ByteArrayOutputStream;
 import javax.inject.*;
+import java.util.ArrayList;
+import java.util.List;
 import play.*;
+import play.http.HttpEntity;
 import play.mvc.*;
 import play.libs.Json;
 
@@ -26,22 +31,23 @@ public class Application extends Controller {
 
   public Result downloadChunked(final int length) {
 
-    Chunks<byte[]> chunks = new ByteChunks() {
-      public void onReady(Chunks.Out<byte[]> out) {
-        int remaining = length;
-        int maxArraySize = 4 * 1024;
-        while (remaining > 0) {
-          int arraySize = Math.min(remaining, maxArraySize);
-          byte[] array = new byte[arraySize];
-          out.write(array);
-          remaining -= arraySize;
-        }
-        out.close();
-      }
-    };
+    assert (length < 100 * 1024): "Chunked download creates all arrays in memory so size is limited to 100,000 bytes";
 
-    // Serves this stream with 200 OK
-    return ok(chunks);
+    // Cap each chunk at 4k
+    final int maxArraySize = 4 * 1024;
+
+    // Create all the chunks and put them in a buffer. It would
+    // be better to do this lazily, but it's simpler to do it eagerly. :)
+    final List<ByteString> chunkBuffer = new ArrayList<ByteString>(length / maxArraySize + 1);
+    int remaining = length;
+    while (remaining > 0) {
+      final int chunkSize = Math.min(remaining, maxArraySize);
+      final ByteString chunk = ByteString.fromArray(new byte[chunkSize]);
+      chunkBuffer.add(chunk);
+      remaining -= chunkSize;
+    }
+
+    return ok().chunked(Source.from(chunkBuffer));
   }
 
   @BodyParser.Of(BodyParser.Raw.class)

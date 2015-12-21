@@ -7,6 +7,7 @@ import play.api._
 import play.api.http.{HttpChunk, HttpEntity}
 import play.api.mvc._
 import play.api.libs.json.Json
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
@@ -23,24 +24,26 @@ class Application @Inject() (implicit
   }
 
   def downloadChunked(length: Int) = Action { request =>
+    assert(length < 100 * 1024, "Chunked download creates all arrays in memory so size is limited to 100,000 bytes")
 
+    // Cap each chunk at 4k
     val maxArraySize = 4 * 1024
 
-    val itr = new Iterator[HttpChunk.Chunk] {
-      private var remaining = length
-      private def nextArraySize = Math.min(remaining, maxArraySize)
-      override def hasNext = nextArraySize > 0
-      override def next = {
-        val size = nextArraySize
-        assert(size > 0)
-        HttpChunk.Chunk(ByteString(new Array[Byte](size)))
-      }
+    // Create all the chunks and put them in a buffer. It would
+    // be better to do this lazily, but it's simpler to do it eagerly. :)
+    val chunkBuffer = new ArrayBuffer[HttpChunk.Chunk](length / maxArraySize + 1)
+    var remaining = length
+    while (remaining > 0) {
+      val chunkSize = Math.min(remaining, maxArraySize)
+      val chunk = HttpChunk.Chunk(ByteString(new Array[Byte](chunkSize)))
+      chunkBuffer += chunk
+      remaining -= chunkSize
     }
 
     Result(
       header = ResponseHeader(200),
       body = HttpEntity.Chunked(
-        chunks = Source(() => itr),
+        chunks = Source(() => chunkBuffer.iterator),
         contentType = None
       )
     )
