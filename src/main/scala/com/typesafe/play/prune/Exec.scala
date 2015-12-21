@@ -175,7 +175,7 @@ object Exec {
 
     private def safeButInefficientToString(is: InputStream): String = {
 
-      val maxSize = 1024 * 1024 // Set max size to 1mb
+      val maxSize = 1024 * 1024 // Set max size of output to 1mb
       val baos = new ByteArrayOutputStream()
 
       /**
@@ -196,25 +196,25 @@ object Exec {
           }
         }
 
-        if (size >= maxSize) {
+        if (size < maxSize) {
+          val c = try is.read() catch {
+            // Work around JVM concurrency bug: http://bugs.java.com/view_bug.do?bug_id=5101298
+            case ioe: IOException if ioe.getMessage == "Stream closed" => -1
+          }
+
+          if (c != -1) {
+            logOutOfMemoryError {
+              baos.write(c)
+            }
+            copyAll(size + 1)
+          }          
+        } else {
+          // We've logged more than maxSize
           val truncateMessage = s"\n--- Truncated output to $maxSize bytes ---"
           logOutOfMemoryError {
             baos.write(truncateMessage.getBytes("ASCII"))
           }
         }
-
-        val c = try is.read() catch {
-          // Work around JVM concurrency bug: http://bugs.java.com/view_bug.do?bug_id=5101298
-          case ioe: IOException if ioe.getMessage == "Stream closed" => -1
-        }
-
-        if (c != -1) {
-          logOutOfMemoryError {
-            baos.write(c)
-          }
-          copyAll(size + 1)
-        }
-
       }
       copyAll(0)
 
