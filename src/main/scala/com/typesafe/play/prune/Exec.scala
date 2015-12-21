@@ -172,27 +172,39 @@ object Exec {
     override def setProcessOutputStream(is: InputStream) = stdoutConsumer = Some(is)
     override def setProcessErrorStream(is: InputStream) = stderrConsumer = Some(is)
     override def setProcessInputStream(os: OutputStream) = stdinProducer = Some(os)
+
     private def safeButInefficientToString(is: InputStream): String = {
 
-      // Workaround JVM concurrency bug: http://bugs.java.com/view_bug.do?bug_id=5101298
-      def safeRead(): Int = {
-        try is.read() catch {
+      val maxSize = 10 * 1024 * 1024 // Set max size to 10mb
+      val baos = new ByteArrayOutputStream()
+
+      /**
+       * Recursive function to copy stream up to a limit. We need to apply a limit
+       * to avoid 
+       */
+      @scala.annotation.tailrec
+      def copyAll(size: Int): Unit = {
+        if (size >= maxSize) {
+          val truncateMessage = s"\n--- Truncated output to $maxSize bytes ---"
+          baos.write(truncateMessage.getBytes("ASCII"))
+        }
+
+        val c = try is.read() catch {
+          // Work around JVM concurrency bug: http://bugs.java.com/view_bug.do?bug_id=5101298
           case ioe: IOException if ioe.getMessage == "Stream closed" => -1
         }
-      }
 
-      val baos = new ByteArrayOutputStream()
-      @scala.annotation.tailrec
-      def copyAll(): Unit = {
-        val c = safeRead()
         if (c != -1) {
           baos.write(c)
-          copyAll()
+          copyAll(size + 1)
         }
+
       }
-      copyAll()
+      copyAll(0)
+
       baos.toString("ASCII")
     }
+
     override def start() = {
       stdoutConsumer.foreach { is =>
         stdoutOutput.completeWith(Future {
