@@ -71,7 +71,7 @@ object Prune {
         |""".stripMargin)
       System.exit(1)
     }
-    if (Files.notExists(userConfigFile)) configError("Please create a Prune configuration file.")
+    if (Files.notExists(userConfigFile)) configError(s"Please create a Prune configuration file at $userConfigFile.")
 
     val userConfig: Config = ConfigFactory.parseFile(userConfigFile.toFile)
     val config = userConfig.withFallback(defaultConfig)
