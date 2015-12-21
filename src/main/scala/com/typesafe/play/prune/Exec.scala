@@ -175,7 +175,7 @@ object Exec {
 
     private def safeButInefficientToString(is: InputStream): String = {
 
-      val maxSize = 10 * 1024 * 1024 // Set max size to 10mb
+      val maxSize = 1024 * 1024 // Set max size to 1mb
       val baos = new ByteArrayOutputStream()
 
       /**
@@ -184,9 +184,23 @@ object Exec {
        */
       @scala.annotation.tailrec
       def copyAll(size: Int): Unit = {
+
+        /** Write to the buffer and log a message if an OOME is caught. */
+        def logOutOfMemoryError[A](f: => A): A = {
+          try f catch {
+            case oome: OutOfMemoryError  =>
+              // Print out some diagnostic information
+              print("OOME hit at size ")
+              println(size)
+              throw oome
+          }
+        }
+
         if (size >= maxSize) {
           val truncateMessage = s"\n--- Truncated output to $maxSize bytes ---"
-          baos.write(truncateMessage.getBytes("ASCII"))
+          logOutOfMemoryError {
+            baos.write(truncateMessage.getBytes("ASCII"))
+          }
         }
 
         val c = try is.read() catch {
@@ -195,12 +209,8 @@ object Exec {
         }
 
         if (c != -1) {
-          try baos.write(c) catch {
-            case oome: OutOfMemoryError  =>
-              // Print out some diagnostic information
-              print("OOME hit at size ")
-              println(size)
-              throw oome
+          logOutOfMemoryError {
+            baos.write(c)
           }
           copyAll(size + 1)
         }
