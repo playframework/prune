@@ -136,21 +136,15 @@ function appendChart(element, branchTestData, seriesInfo, options) {
   return {element: chartElement, plot: plot};
 }
 
-var branchNames = ['master', '2.4.x', '2.3.x'];
+var branchNames = ['master', '2.4.x'];
 var testNameBeginnings = ['scala', 'java'];
 var testNameEndings = [
   'di-simple',
-  'simple',
   'di-download-50k',
-  'download-50k',
   'di-download-chunked-50k',
-  'download-chunked-50k',
   'di-json-encode',
-  'json-encode',
   'di-template-simple',
-  'template-simple',
   'di-template-lang',
-  'template-lang'
 ];
 
 var tableElement = $('<table></table>').appendTo($('#placeholder'));
