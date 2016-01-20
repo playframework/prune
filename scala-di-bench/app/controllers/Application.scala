@@ -43,7 +43,7 @@ class Application @Inject() (implicit
     Result(
       header = ResponseHeader(200),
       body = HttpEntity.Chunked(
-        chunks = Source(() => chunkBuffer.iterator),
+        chunks = Source.fromIterator(() => chunkBuffer.iterator),
         contentType = None
       )
     )
