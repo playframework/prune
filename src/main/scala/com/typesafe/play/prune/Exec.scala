@@ -26,29 +26,29 @@ object Exec {
     streamResultGetter: () => Option[(String, String)]
   )
 
+  def replaceContextValues(s: String)(implicit ctx: Context): String = {
+    val replacements = Map(
+      "<assets.home>" -> ctx.assetsHome,
+      "<prune.home>" -> ctx.pruneHome,
+      "<play.home>" -> ctx.playHome,
+      "<apps.home>" -> ctx.appsHome,
+      "<java8.home>" -> ctx.java8Home,
+      "<ivy.home>" -> ctx.ivyHome,
+      "<server.url>" -> "http://localhost:9000",
+      "<yourkit.agent>" -> ctx.yourkitAgent,
+      "<yourkit.home>" -> ctx.yourkitHome
+    )
+    replacements.foldLeft(s) {
+      case (s, (name, value)) => s.replace(name, value)
+    }
+  }
+
   private def prepare(
     command: Command,
     streamHandling: StreamHandling,
     timeout: Option[Long] = None)(implicit ctx: Context): Prepared = {
 
-    def configureCommand(command: Command): Command = {
-      val replacements: Map[String,String] = Map(
-        "assets.home" -> ctx.assetsHome,
-        "prune.home" -> ctx.pruneHome,
-        "play.home" -> ctx.playHome,
-        "apps.home" -> ctx.appsHome,
-        "java8.home" -> ctx.java8Home,
-        "ivy.home" -> ctx.ivyHome,
-        "server.url" -> "http://localhost:9000",
-        "yourkit.agent" -> ctx.yourkitAgent,
-        "yourkit.home" -> ctx.yourkitHome
-      )
-      replacements.foldLeft(command) {
-        case (c, (name, value)) => c.replace("<"+name+">", value)
-      }
-    }
-
-    val configuredCommand = configureCommand(command)
+    val configuredCommand = command.mapStrings(replaceContextValues(_))
     //println(s"Configured command: $configuredCommand")
     val commandLine = new CommandLine(configuredCommand.program)
     for (arg <- configuredCommand.args) { commandLine.addArgument(arg) }

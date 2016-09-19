@@ -3,24 +3,13 @@
  */
 package com.typesafe.play.prune
 
-import java.io._
 import java.nio.file._
-import java.util.{ List => JList, Map => JMap, UUID }
-import java.util.concurrent.TimeUnit
-import org.apache.commons.io.{ FileUtils, IOUtils }
-import org.apache.commons.exec._
-import org.eclipse.jgit.api.Git
-import org.eclipse.jgit.lib._
-import org.eclipse.jgit.revwalk._
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder
-import org.joda.time._
-import scala.collection.JavaConversions
-import scala.concurrent._
-import scala.concurrent.duration.Duration
-import scala.concurrent.ExecutionContext.Implicits.global
+import java.nio.file.attribute.{PosixFileAttributes, PosixFilePermission}
+import java.util.{UUID, List => JList, Map => JMap}
 
-import Exec._
-import PruneGit._
+import com.typesafe.play.prune.Exec._
+import com.typesafe.play.prune.PruneGit._
+import org.apache.commons.io.FileUtils
 
 object BuildPlay {
   def buildPlay(playBranch: String, playCommit: String)(implicit ctx: Context): Option[(UUID, PlayBuildRecord)] = {
@@ -118,19 +107,39 @@ object BuildPlay {
       }
     }
 
-    val buildCommands: Seq[Command] = Seq(
-      Command(
-        program = "./build",
-        args = Seq("-Dsbt.ivy.home=<ivy.home>", ";clean;publish-local"),
-        env = Map(
-          "JAVA_HOME" -> "<java8.home>",
-          "LANG" -> "en_US.UTF-8"
-        ),
-        workingDir = "<play.home>/framework"
-      )
+    if (Files.exists(Paths.get(replaceContextValues("<play.home>/framework/build")))) {
+
+    }
+
+    val commonBuildEnv = Map(
+      "JAVA_HOME" -> "<java8.home>",
+      "LANG" -> "en_US.UTF-8"
     )
 
-    buildCommands.map(run(_, Pump, errorOnNonZeroExit = errorOnNonZeroExit))
+    val buildCommand: Command = {
+      val playHome: Path = Paths.get(ctx.playHome)
+      val oldBuildExists = Files.exists(playHome.resolve("framework/build"))
+      if (oldBuildExists) {
+        // Run Play's build command
+        Command(
+          program = "./build",
+          args = Seq("-Dsbt.ivy.home=<ivy.home>", ";clean;publishLocal"),
+          env = commonBuildEnv,
+          workingDir = "<play.home>/framework"
+        )
+      } else {
+        // Run sbt directly
+        Command(
+          program = "sbt",
+          args = Seq("-Dsbt.ivy.home=<ivy.home>", "clean", "quickPublish", "publishLocal"),
+          env = commonBuildEnv,
+          workingDir = "<play.home>/framework"
+        )
+      }
+    }
+
+    val execution = run(buildCommand, streamHandling = Pump, errorOnNonZeroExit = errorOnNonZeroExit)
+    Seq(execution)
   }
 
 }

@@ -277,7 +277,7 @@ case class Command(
   workingDir: String,
   env: Map[String, String]
 ) {
-  private def mapStrings(f: String => String): Command = {
+  def mapStrings(f: String => String): Command = {
     Command(
       program = f(program),
       args = args.map(f),
@@ -285,9 +285,6 @@ case class Command(
       env = env.mapValues(f)
     )
   }
-  def replace(original: String, replacement: String): Command = {
-    mapStrings(_.replace(original, replacement))
-  }  
 }
 
 case class TestRunRecord(

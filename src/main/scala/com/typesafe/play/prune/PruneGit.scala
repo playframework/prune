@@ -106,8 +106,22 @@ object PruneGit {
 
   def gitCheckout(localDir: String, branch: String, commit: String): Unit = {
     withRepository(localDir) { repository =>
+      val localGit: Git = new Git(repository)
+      println("Cleaning directory before checking out")
+      val cleanedFiles = localGit.clean().setCleanDirectories(true).call()
+      println(s"Cleaned ${cleanedFiles.size} files")
+      println("Reverting any local modifications")
+      val localModifications = localGit.status().call().getModified
+      if (!localModifications.isEmpty) {
+        val revertCheckout = localGit.checkout
+        for (f <- iterableAsScalaIterable(localModifications)) {
+          println(s"Reverting $f")
+          revertCheckout.addPath(f)
+        }
+        revertCheckout.call()
+      }
       println(s"Checking out $commit")
-      val result = new Git(repository).checkout.setName(commit).call()
+      val result = localGit.checkout.setName(commit).call()
     }
   }
 
