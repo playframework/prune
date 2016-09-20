@@ -136,7 +136,7 @@ function appendChart(element, branchTestData, seriesInfo, options) {
   return {element: chartElement, plot: plot};
 }
 
-var branchNames = ['master', '2.4.x'];
+var branchNames = Object.keys(report.branches).sort().reverse();
 var testNameBeginnings = ['scala', 'java'];
 var testNameEndings = [
   'di-simple',
