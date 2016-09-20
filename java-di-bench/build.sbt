@@ -5,14 +5,12 @@ version := "1.0-SNAPSHOT"
 lazy val root = (project in file(".")).enablePlugins(PlayJava)
 
 libraryDependencies ++= Seq(
-  guiceSupport,
+  guice,
   json
 )
 
 javacOptions ++= Seq("-Xlint:deprecation")
 
-scalaVersion := "2.11.7"
+scalaVersion := "2.11.8"
 
 routesGenerator := InjectedRoutesGenerator
-
-resolvers += "scalaz-bintray" at "http://dl.bintray.com/scalaz/releases"
