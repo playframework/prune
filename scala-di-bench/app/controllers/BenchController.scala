@@ -11,19 +11,22 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
-class Application @Inject() (implicit
-  ec: ExecutionContext
-) extends Controller {
+class BenchController @Inject() (
+    action: DefaultActionBuilder,
+    parsers: PlayBodyParsers
+  )(implicit
+    ec: ExecutionContext
+  ) extends Controller {
 
-  def simple = Action { request =>
+  def simple = action { request =>
     Ok("Hello world.")
   }
 
-  def download(length: Int) = Action { request =>
+  def download(length: Int) = action { request =>
     Ok(new Array[Byte](length))
   }
 
-  def downloadChunked(length: Int) = Action { request =>
+  def downloadChunked(length: Int) = action { request =>
     assert(length < 100 * 1024, "Chunked download creates all arrays in memory so size is limited to 100,000 bytes")
 
     // Cap each chunk at 4k
@@ -49,19 +52,19 @@ class Application @Inject() (implicit
     )
   }
 
-  def upload = Action(parse.raw) { request =>
+  def upload = action(parsers.raw) { request =>
     Ok("upload")
   }
 
-  def templateSimple = Action { request =>
+  def templateSimple = action { request =>
     Ok(views.html.simple("simple"))
   }
 
-  def templateLang = Action { request =>
+  def templateLang = action { request =>
     Ok(views.html.lang())
   }
 
-  def jsonEncode = Action { request =>
+  def jsonEncode = action { request =>
     Ok(Json.obj("message" -> "Hello, World!"))
   }
 

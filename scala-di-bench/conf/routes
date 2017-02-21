@@ -1,7 +1,7 @@
-GET   /simple                   controllers.Application.simple
-GET   /download/:length         controllers.Application.download(length: Int)
-GET   /download-chunked/:length controllers.Application.downloadChunked(length: Int)
-PUT   /upload                   controllers.Application.upload
-GET   /template/simple          controllers.Application.templateSimple
-GET   /template/lang            controllers.Application.templateLang
-GET   /json/encode              controllers.Application.jsonEncode
+GET   /simple                   controllers.BenchController.simple
+GET   /download/:length         controllers.BenchController.download(length: Int)
+GET   /download-chunked/:length controllers.BenchController.downloadChunked(length: Int)
+PUT   /upload                   controllers.BenchController.upload
+GET   /template/simple          controllers.BenchController.templateSimple
+GET   /template/lang            controllers.BenchController.templateLang
+GET   /json/encode              controllers.BenchController.jsonEncode

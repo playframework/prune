@@ -16,10 +16,10 @@ import play.libs.Json;
 import views.html.*;
 
 @Singleton
-public class Application extends Controller {
+public class BenchController extends Controller {
 
   @Inject
-  public Application() {}
+  public BenchController() {}
 
   public Result simple() {
     return ok("Hello world");
