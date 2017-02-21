@@ -4,13 +4,14 @@ version := "1.0-SNAPSHOT"
 
 lazy val root = (project in file(".")).enablePlugins(PlayJava)
 
-libraryDependencies ++= Seq(
-  guice,
-  json
-)
+resolvers += Resolver.sonatypeRepo("snapshots")
 
+scalaVersion := "2.12.1"
 javacOptions ++= Seq("-Xlint:deprecation")
 
-scalaVersion := "2.11.8"
+libraryDependencies ++= Seq(
+  guice,
+  "com.typesafe.play" %% "play-json" % "2.6.0-M2"
+)
 
-routesGenerator := InjectedRoutesGenerator
+
