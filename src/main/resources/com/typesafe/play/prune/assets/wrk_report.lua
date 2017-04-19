@@ -60,4 +60,5 @@ function stats(obj)
   io.write(string.format('[95,%d],', obj:percentile(95)))
   io.write(string.format('[99,%d]', obj:percentile(99)))
   io.write(']\n')
+  io.flush()
 end
