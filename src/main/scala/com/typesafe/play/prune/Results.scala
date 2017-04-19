@@ -3,8 +3,9 @@
  */
 package com.typesafe.play.prune
 
+import com.fasterxml.jackson.core.JsonParseException
 import play.api.libs.functional.syntax._
-import play.api.libs.json.{JsPath, Reads, Json }
+import play.api.libs.json.{JsPath, Json, Reads}
 
 
 object Results {
@@ -12,7 +13,9 @@ object Results {
   def parseWrkOutput(output: String): Either[String,WrkResult] = {
     val split: Array[String] = output.split("JSON:")
     split.tail.headOption.toRight("Missing JSON in result").right.flatMap { jsonText =>
-      val json = Json.parse(jsonText)
+      val json = try Json.parse(jsonText) catch {
+        case e: JsonParseException => throw new Exception(s"Failed to parse JSON:\n$jsonText", e)
+      }
       val result = WrkResult.reads.reads(json)
       result.fold(_ => Left(s"Failed to parse wrk result: $jsonText"), r => Right(r))
     }

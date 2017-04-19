@@ -158,15 +158,18 @@ object Prune {
   }
 
   def test(implicit ctx: Context): Unit = {
-    
+
+    // Calculate how long we have to run tests
     val deadline: Option[DateTime] = ctx.args.maxTotalMinutes.map { mins =>
       DateTime.now.plusMinutes(mins)
     }
 
+    // Work out the commit id of the Play build that we last compiled
     val lastPlayBuildCommit: Option[String] = BuildPlay.lastBuild().map {
       case (_, buildRecord) => buildRecord.playCommit
     }
 
+    // Choose how to prioritize/order the Play commits for testing
     val sortFunction: (TestTask, TestTask) => Boolean = if (ctx.args.lexicalOrder) {
       case (task1, task2) => task1.playCommitTime.compareTo(task2.playCommitTime) > 0 // Reverse date order
     } else {
