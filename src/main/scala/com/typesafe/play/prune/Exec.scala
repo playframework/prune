@@ -198,7 +198,7 @@ object Exec {
 
         val c = try is.read() catch {
           // Work around JVM concurrency bug: http://bugs.java.com/view_bug.do?bug_id=5101298
-          case ioe: IOException if ioe.getMessage == "Stream closed" => -1
+          case ioe: IOException if ioe.getMessage.toLowerCase.contains("stream closed") => -1
         }
 
         if (c == -1) {
