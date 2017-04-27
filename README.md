@@ -1,4 +1,4 @@
-Prune — *"Keeping Play moving"*
+# Prune — *"Keeping Play moving"*
 
 Prune is a tool for automatically testing the performance of Play Framework. It automates the process of checking out different versions of Play, compiling apps against those versions and then running load tests. It saves all results into files in a Git repository. It also pushes a summary of results to a website. The name *Prune* comes from "Play runner".
 
@@ -6,7 +6,7 @@ Prune is a tool for automatically testing the performance of Play Framework. It 
 
 [**You can see graphs of the latest performance results here.**](http://playframework.github.io/prune/)
 
-Prune is run each day on a dedicated server donated by [Typesafe](http://typesafe.com/). The server is a [Xeon E5-2430L v2 2.4GHz](http://ark.intel.com/products/75785/Intel-Xeon-Processor-E5-2430-v2-15M-Cache-2_50-GHz) with [Turbo Boost disabled](http://www.brendangregg.com/blog/2014-09-15/the-msrs-of-ec2.html). The JVM uses 1GB heap and no other settings. The load testing client is run on the same machine as the Play server. Raw test results are pushed in the [*database*](https://github.com/playframework/prune/tree/database) branch of the Prune Github repository.
+Prune is run each day on a dedicated server donated by [Lightbend](https://www.lightbend.com/). The server is a [Xeon E5-2430L v2 2.4GHz](http://ark.intel.com/products/75785/Intel-Xeon-Processor-E5-2430-v2-15M-Cache-2_50-GHz) with [Turbo Boost disabled](http://www.brendangregg.com/blog/2014-09-15/the-msrs-of-ec2.html). The JVM uses 1GB heap and no other settings. The load testing client is run on the same machine as the Play server. Raw test results are pushed in the [*database*](https://github.com/playframework/prune/tree/database) branch of the Prune Github repository.
 
 ## Tests
 
@@ -15,6 +15,14 @@ Prune currently runs the following tests. More tests are planned in the future, 
 ### scala-simple / java-simple
 
 Tests an action that sends a plain text response of `Hello world.`.
+
+### scala-simple-form / java-simple-form
+
+Tests an action that receives a `POST` request, parses it and sends a plain text response.
+
+### scala-simple-upload / java-simple-upload
+
+Tests an action that receives a `PUT` multipart-form (file upload) request, parses it and sends a plain text response.
 
 ### scala-download-50k / java-download-50k
 
@@ -35,6 +43,14 @@ Test an action that returns a short HTML page generated from a template that tak
 ### scala-template-lang / java-template-lang
 
 Test an action that returns a short HTML page generated from a template that takes an implicit language.
+
+----------------
+
+All the tests above run for three distinct configurations:
+
+1. Using Netty server
+2. Using [Akka HTTP](https://github.com/akka/akka-http) Server with default filters
+3. Using [Akka HTTP](https://github.com/akka/akka-http) Server **without** default filtersca
 
 ## Example Prune workflow
 
