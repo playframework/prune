@@ -3,8 +3,11 @@ package controllers;
 import akka.stream.javadsl.Source;
 import akka.util.ByteString;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import java.io.File;
 import java.io.IOException;
 import java.io.ByteArrayOutputStream;
+
 import javax.inject.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,11 +18,23 @@ import play.libs.Json;
 
 import views.html.*;
 
+import models.User;
+import play.data.Form;
+import play.data.FormFactory;
+import play.data.validation.Constraints;
+
+import play.mvc.Http.MultipartFormData;
+import play.mvc.Http.MultipartFormData.FilePart;
+
 @Singleton
 public class BenchController extends Controller {
 
+  private final FormFactory formFactory;
+
   @Inject
-  public BenchController() {}
+  public BenchController(FormFactory formFactory) {
+    this.formFactory = formFactory;
+  }
 
   public Result simple() {
     return ok("Hello world");
@@ -50,9 +65,18 @@ public class BenchController extends Controller {
     return ok().chunked(Source.from(chunkBuffer));
   }
 
-  @BodyParser.Of(BodyParser.Raw.class)
   public Result upload() {
-    return ok("upload"); // TODO: Verify upload happened
+    MultipartFormData<File> body = request().body().asMultipartFormData();
+    FilePart<File> uploadedFile = body.getFiles().get(0);
+
+    if (uploadedFile == null) {
+      return badRequest("No file");
+    }
+
+    String filename = uploadedFile.getFilename();
+    File source = uploadedFile.getFile();
+    // Do nothing with the file.
+    return ok("It works!");
   }
 
   public Result templateSimple() {
@@ -69,4 +93,12 @@ public class BenchController extends Controller {
     return ok(result);
   }
 
+  public Result simpleForm() {
+    Form<User> userForm = formFactory.form(User.class).bindFromRequest();
+    if (userForm.hasErrors()) {
+      return badRequest("This shouln't happen");
+    }
+    User user = userForm.get();
+    return ok("It works");
+  }
 }

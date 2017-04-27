@@ -1,10 +1,9 @@
-name := "java-netty-bench"
+name := "java-di-bench"
 
 version := "1.0-SNAPSHOT"
 
 lazy val root = (project in file(".")).enablePlugins(PlayJava)
-  .enablePlugins(PlayNettyServer)
-  .disablePlugins(PlayAkkaHttpServer)
+  .disablePlugins(PlayFilters)
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 
