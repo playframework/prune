@@ -79,6 +79,11 @@ public class BenchController extends Controller {
     return ok("It works!");
   }
 
+  @BodyParser.Of(BodyParser.Raw.class)
+  public Result uploadRaw() {
+    return ok("It works"); // TODO: Verify upload happened
+  }
+
   public Result templateSimple() {
     return ok(views.html.simple.render("simple"));
   }
