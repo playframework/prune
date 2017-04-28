@@ -86,6 +86,10 @@ class BenchController @Inject() (
     }
   }
 
+  def uploadRaw = action(parsers.raw) { request =>
+    Ok("Upload done")
+  }
+
   def templateSimple = action { request =>
     Ok(views.html.simple("simple"))
   }
