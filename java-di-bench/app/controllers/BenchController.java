@@ -81,7 +81,7 @@ public class BenchController extends Controller {
 
   @BodyParser.Of(BodyParser.Raw.class)
   public Result uploadRaw() {
-    return ok("It works"); // TODO: Verify upload happened
+    return ok("It works");
   }
 
   public Result templateSimple() {
@@ -101,7 +101,7 @@ public class BenchController extends Controller {
   public Result simpleForm() {
     Form<User> userForm = formFactory.form(User.class).bindFromRequest();
     if (userForm.hasErrors()) {
-      return badRequest("This shouln't happen");
+      return badRequest("This shouldn't happen");
     }
     User user = userForm.get();
     return ok("It works");
