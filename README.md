@@ -50,7 +50,7 @@ All the tests above run for three distinct configurations:
 
 1. Using Netty server
 2. Using [Akka HTTP](https://github.com/akka/akka-http) Server with default filters
-3. Using [Akka HTTP](https://github.com/akka/akka-http) Server **without** default filtersca
+3. Using [Akka HTTP](https://github.com/akka/akka-http) Server **without** default filters
 
 ## Example Prune workflow
 
