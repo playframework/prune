@@ -10,6 +10,12 @@ import play.api.libs.json.Json
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 
+import java.io.File
+import java.nio.file.{FileAlreadyExistsException, StandardCopyOption, Files => JFiles}
+
+import play.api.data._
+import play.api.data.Forms._
+
 @Singleton
 class BenchController @Inject() (
     action: DefaultActionBuilder,
@@ -17,6 +23,19 @@ class BenchController @Inject() (
   )(implicit
     ec: ExecutionContext
   ) extends Controller {
+
+  val uploadsDir = new File("/tmp/uploads")
+  uploadsDir.mkdirs()
+
+  val userForm = Form(
+    mapping(
+      "name" -> text,
+      "email" -> email,
+      "age" -> number,
+      "twitter" -> optional(text),
+      "github" -> optional(text)
+    )(User.apply)(User.unapply)
+  )
 
   def simple = action { request =>
     Ok("Hello world.")
@@ -52,8 +71,23 @@ class BenchController @Inject() (
     )
   }
 
-  def upload = action(parsers.raw) { request =>
-    Ok("upload")
+  def simpleForm = action { implicit request =>
+    userForm.bindFromRequest.fold(
+      formWithErrors => BadRequest("This should not happen"),
+      user => Ok("It works!")
+    )
+  }
+
+  def upload = action(parsers.multipartFormData) { request =>
+    request.body.files.foldLeft(InternalServerError("Could not upload the file")) { (r, uploadedFile) =>
+      val to = new File(uploadsDir, uploadedFile.filename)
+      moveTo(uploadedFile.ref.file, to, replace = true)
+      Ok("Upload done")
+    }
+  }
+
+  def uploadRaw = action(parsers.raw) { request =>
+    Ok("Upload done")
   }
 
   def templateSimple = action { request =>
@@ -68,4 +102,26 @@ class BenchController @Inject() (
     Ok(Json.obj("message" -> "Hello, World!"))
   }
 
+  // Using our own moveTo for now because of https://github.com/playframework/playframework/pull/7280
+  def moveTo(file: File, to: File, replace: Boolean = false): File = {
+    try {
+      if (replace)
+        JFiles.move(file.toPath, to.toPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+      else
+        JFiles.move(file.toPath, to.toPath)
+    } catch {
+      case ex: FileAlreadyExistsException => to
+    }
+
+    to
+  }
+
 }
+
+case class User(
+  name: String,
+  email: String,
+  age: Int,
+  twitter: Option[String],
+  github: Option[String]
+)

@@ -2,6 +2,8 @@ GET   /simple                   controllers.BenchController.simple
 GET   /download/:length         controllers.BenchController.download(length: Int)
 GET   /download-chunked/:length controllers.BenchController.downloadChunked(length: Int)
 PUT   /upload                   controllers.BenchController.upload
+PUT   /uploadRaw                controllers.BenchController.uploadRaw
+POST  /simpleForm               controllers.BenchController.simpleForm
 GET   /template/simple          controllers.BenchController.templateSimple
 GET   /template/lang            controllers.BenchController.templateLang
 GET   /json/encode              controllers.BenchController.jsonEncode
