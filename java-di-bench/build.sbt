@@ -11,7 +11,7 @@ javacOptions ++= Seq("-Xlint:deprecation")
 
 libraryDependencies ++= Seq(
   guice,
-  "com.typesafe.play" %% "play-json" % "2.6.0-M2"
+  "com.typesafe.play" %% "play-json" % "2.6.0-M7"
 )
 
 
