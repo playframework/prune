@@ -1,3 +1,7 @@
+--
+-- THE CODE IN THIS SCRIPT NEEDS TO BE MANUALLY COPIED INTO THE OTHER LUA SCRIPTS WHENEVER IT IS CHANGED
+--
+
 -- A script for `wrk` to write out test results in JSON format.
 
 done = function(summary, latency, requests)

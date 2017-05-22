@@ -135,7 +135,7 @@ object RunTest {
     val execution = run(
       Command(
         program = "wrk",
-        args = Seq(s"-t$threads", s"-c$connections", s"-d${durationSeconds}s", "-s<assets.home>/wrk_report.lua") ++ wrkArgs,
+        args = Seq(s"-t$threads", s"-c$connections", s"-d${durationSeconds}s") ++ wrkArgs,
         env = Map(),
         workingDir = "<prune.home>"
       ),

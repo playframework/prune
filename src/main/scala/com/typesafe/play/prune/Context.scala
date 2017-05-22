@@ -107,6 +107,7 @@ case class Args(
   playRevs: Seq[String] = Seq.empty,
   lexicalOrder: Boolean = false,
   testNames: Seq[String] = Seq.empty,
+  repeatTests: Boolean = false,
   testShutdownSeconds: Option[Int] = None,
   maxTotalMinutes: Option[Int] = None,
   outputFile: Option[String] = None,
@@ -166,6 +167,9 @@ object Args {
         } text("Run tests in commit lexical order, rather than date order"),
         opt[String]("test-name") optional() unbounded() action { (s, c) =>
           c.copy(testNames = c.testNames :+ s)
+        },
+        opt[Unit]("repeat-tests") action { (_, c) =>
+          c.copy(repeatTests = true)
         },
         opt[Int]("test-shutdown-seconds") action { (i, c) =>
           c.copy(testShutdownSeconds = Some(i))

@@ -214,11 +214,16 @@ object Prune {
             appName = join.appBuildRecord.appName
           )
     }.toSeq
-    val tasksToRun: Seq[TestTask] = neededTasks.filter(task => !completedTaskInfos.contains(task.info))
+    val tasksToRun: Seq[TestTask] = if (ctx.args.repeatTests) {
+      println("User has passed argument allowing tests to be repeated: not filtering out tests already executed")
+      neededTasks
+    } else {
+      neededTasks.filter(task => !completedTaskInfos.contains(task.info))
+    }
 
     println(s"Prune tests already executed: ${completedTaskInfos.map(_.playCommit).distinct.size} Play revisions, ${completedTaskInfos.size} test runs")
     println(s"Prune tests needed: ${neededTasks.map(_.info.playCommit).distinct.size} Play revisions, ${neededTasks.size} test runs")
-    println(s"Prune tests remaining: ${tasksToRun.map(_.info.playCommit).distinct.size} Play revisions, ${tasksToRun.size} test runs")
+    println(s"Prune tests to run: ${tasksToRun.map(_.info.playCommit).distinct.size} Play revisions, ${tasksToRun.size} test runs")
 
     if (ctx.args.verbose) {
       println(s"First task to run: ${tasksToRun.headOption}")
