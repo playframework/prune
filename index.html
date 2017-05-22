@@ -137,11 +137,14 @@ function appendChart(element, branchTestData, seriesInfo, options) {
 }
 
 var branchNames = Object.keys(report.branches).sort().reverse();
-var testNameBeginnings = ['scala-minimal', 'scala-di', 'scala-netty', 'java-di', 'java-netty'];
+var testNameBeginnings = ['scala-minimal', 'scala-di', 'scala-netty', 'java-minimal', 'java-di', 'java-netty'];
 var testNameEndings = [
   'simple',
+  'simple-post',
   'download-50k',
   'download-chunked-50k',
+  'upload-1m',
+  'upload-raw-1m',
   'json-encode',
   'template-simple',
   'template-lang',
