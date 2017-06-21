@@ -9,7 +9,8 @@ import java.util.concurrent.TimeUnit
 
 import Exec._
 
-import scala.util.Try
+import scala.annotation.tailrec
+import scala.util.{Failure, Try}
 
 object RunTest {
 
@@ -94,7 +95,7 @@ object RunTest {
       sys.error("Can't start server: port already in use")
     }
 
-    val terminateServer: () => Try[Execution] = runAsync(
+    val runHandle: RunAsyncHandle = runAsync(
       Command(
         s"bin/${appName}",
         args = Seq(),
@@ -112,18 +113,33 @@ object RunTest {
 
       // Repeatedly try to connect to localhost:9000 until we detect that the
       // server has started. Not very elegant, but it should work.
-      val serverStarted = pollFor(max = 10000, interval = 50) { canConnectTo("localhost", 9000, timeout = 50) }
-      if (!serverStarted) {
-        val e: Try[Execution] = terminateServer()
-        println(s"Server execution: $e")
-        sys.error("Server didn't start, aborting test")
+
+      val deadlineTime = System.currentTimeMillis + 5000
+
+      @tailrec
+      def waitForServerActivity(): Unit = {
+        if (!runHandle.result.isCompleted && System.currentTimeMillis < deadlineTime) {
+          val serverListening: Boolean = canConnectTo("localhost", 9000, timeout = 50)
+          if (!serverListening) {
+            Thread.sleep(50)
+            waitForServerActivity()
+          }
+        }
       }
 
-      val bodyResult = body
-      val serverExecution = terminateServer().get
-      (serverExecution, bodyResult)
+      waitForServerActivity()
+
+      if (runHandle.result.isCompleted) {
+        sys.error(s"Server didn't start, aborting test: ${runHandle.result.value.get.get}")
+      } else {
+        val bodyResult = body
+        val serverExecution: Execution = runHandle.destroyProcess()
+        (serverExecution, bodyResult)
+      }
     } finally {
-      terminateServer()
+      if (!runHandle.result.isCompleted) {
+        runHandle.destroyProcess()
+      }
     }
   }
 

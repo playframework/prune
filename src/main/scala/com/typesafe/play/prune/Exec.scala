@@ -5,16 +5,18 @@ package com.typesafe.play.prune
 
 import java.io._
 import java.nio.file._
-import java.util.{ Map => JMap }
+import java.util.{Map => JMap}
 import java.util.concurrent.TimeUnit
-import org.apache.commons.io.{ FileUtils, IOUtils }
+
+import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.commons.exec._
 import org.joda.time._
+
 import scala.collection.JavaConversions
 import scala.concurrent._
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{Deadline, Duration}
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 object Exec {
 
@@ -120,45 +122,71 @@ object Exec {
     } else execution
   }
 
+  trait RunAsyncHandle {
+    def destroyProcess(): Execution
+    def result: Future[Execution]
+  }
+
   def runAsync(
     command: Command,
     streamHandling: StreamHandling,
     errorOnNonZeroExit: Boolean = true,
-    timeout: Option[Long] = None)(implicit ctx: Context): () => Try[Execution] = {
-    val prepared = prepare(command, streamHandling, timeout)
-    import prepared._
-    val resultHandler = new DefaultExecuteResultHandler()
-    val startTime = DateTime.now
-    executor.execute(commandLine, environment, resultHandler)
+    timeout: Option[Long] = None)(implicit ctx: Context): RunAsyncHandle = {
+    val prepared: Prepared = prepare(command, streamHandling, timeout)
 
-    @volatile
-    var destroyResult: Option[Try[Execution]] = None
-    () => {
-      destroyResult match {
-        case Some(e) => e
-        case None =>
-          val r = Try {
-            watchdog.destroyProcess()
-            resultHandler.waitFor(ctx.testShutdownSeconds * 1000)
-            val endTime = DateTime.now
-            val returnCode = if (resultHandler.hasResult) resultHandler.getExitValue else resultHandler.getException.getExitValue
-            val streamResult = streamResultGetter()
-            val execution = Execution(
-              command = command,
-              stdout = streamResult.map(_._1),
-              stderr = streamResult.map(_._2),
-              returnCode = Some(returnCode),
-              startTime = startTime,
-              endTime = endTime
-            )
-            if (errorOnNonZeroExit && execution.returnCode.fold(false)(_ != 0)) {
-              sys.error(s"Execution failed: $execution")
-            } else execution
-          }
-          destroyResult = Some(r)
-          r
+    val handle = new RunAsyncHandle with ExecuteResultHandler {
+      private val startTime: DateTime = DateTime.now
+      private val resultPromise: Promise[Execution] = Promise[Execution]
+
+      override def result: Future[Execution] = resultPromise.future
+
+      override def onProcessComplete(exitValue: Int): Unit = synchronized {
+        val endTime: DateTime = DateTime.now
+
+        if (errorOnNonZeroExit && exitValue != 0) {
+          resultPromise.failure(new IOException(s"Execution failed: $command"))
+        } else {
+
+          // Get the contents of stdout/stderr
+          val streamResult: Option[(String, String)] = prepared.streamResultGetter()
+
+          val execution = Execution(
+            command = command,
+            stdout = streamResult.map(_._1),
+            stderr = streamResult.map(_._2),
+            returnCode = Some(exitValue),
+            startTime = startTime,
+            endTime = endTime
+          )
+          resultPromise.success(execution)
+        }
       }
+
+      override def onProcessFailed(e: ExecuteException): Unit = synchronized {
+        resultPromise.failure(e)
+      }
+
+      override def destroyProcess(): Execution = synchronized {
+        if (!result.isCompleted) {
+          prepared.watchdog.destroyProcess()
+          val deadline = Deadline.now + Duration(ctx.testShutdownSeconds, TimeUnit.SECONDS)
+          while (!result.isCompleted && deadline.hasTimeLeft()) { Thread.sleep(50) }
+        }
+        result.value.get.get
+      }
+
     }
+
+    try {
+      prepared.executor.execute(
+        prepared.commandLine,
+        prepared.environment,
+        handle)
+    } catch {
+      case e: ExecutionException =>
+    }
+
+    handle
   }
 
   private[Exec] class CapturingStreamHandler extends ExecuteStreamHandler {
