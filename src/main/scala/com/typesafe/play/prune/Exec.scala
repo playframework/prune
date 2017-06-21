@@ -123,7 +123,7 @@ object Exec {
   }
 
   trait RunAsyncHandle {
-    def destroyProcess(): Execution
+    def destroyProcess(): Option[Execution]
     def result: Future[Execution]
   }
 
@@ -166,13 +166,13 @@ object Exec {
         resultPromise.failure(e)
       }
 
-      override def destroyProcess(): Execution = synchronized {
+      override def destroyProcess(): Option[Execution] = synchronized {
         if (!result.isCompleted) {
           prepared.watchdog.destroyProcess()
           val deadline = Deadline.now + Duration(ctx.testShutdownSeconds, TimeUnit.SECONDS)
           while (!result.isCompleted && deadline.hasTimeLeft()) { Thread.sleep(50) }
         }
-        result.value.get.get
+        result.value.map(_.get)
       }
 
     }

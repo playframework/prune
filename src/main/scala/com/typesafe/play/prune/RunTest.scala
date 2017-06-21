@@ -133,7 +133,7 @@ object RunTest {
         sys.error(s"Server didn't start, aborting test: ${runHandle.result.value.get.get}")
       } else {
         val bodyResult = body
-        val serverExecution: Execution = runHandle.destroyProcess()
+        val serverExecution: Execution = runHandle.destroyProcess().get
         (serverExecution, bodyResult)
       }
     } finally {
